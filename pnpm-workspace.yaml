@@ -1,0 +1,5 @@
+# pnpm 11 构建许可（供应链白名单）
+allowBuilds:
+  electron: true
+  electron-winstaller: true
+  esbuild: true

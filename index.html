@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <script>
+      // 与 src/hooks/useTheme.ts 共享 'appearance-storage' 的存储格式（{state:{mode},version}）。
+      // 在 CSS 应用前预置 .dark 类，避免深色用户首帧白闪。修改 useTheme 持久化结构须同步此处。
+      try {
+        var raw = localStorage.getItem('appearance-storage')
+        var mode = raw ? (JSON.parse(raw).state || {}).mode : 'system'
+        if (
+          mode === 'dark' ||
+          (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ) {
+          document.documentElement.classList.add('dark')
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
