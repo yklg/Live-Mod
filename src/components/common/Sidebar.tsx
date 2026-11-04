@@ -105,7 +105,7 @@ export default function Sidebar() {
       <SidebarHeader>
         <div className="flex items-center gap-2.5 px-2 py-1.5">
           <img
-            src="/favicon.png"
+            src="./favicon.png"
             alt="Live Mod"
             className="h-8 w-8 shrink-0 rounded-lg bg-background/60 p-0.5"
           />
