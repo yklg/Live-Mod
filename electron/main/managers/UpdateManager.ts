@@ -8,6 +8,7 @@ import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from
 import { marked } from 'marked'
 import semver from 'semver'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { parseGithubRepo, type GithubRepo } from 'shared/repo'
 import * as yaml from 'yaml'
 import windowManager from '#/windowManager'
 import packageJson from '../../../package.json'
@@ -26,10 +27,17 @@ type LatestYml = {
   releaseDate: string
 }
 
-const GITHUB_OWNER = 'qiutongxue'
-const GITHUB_REPO = 'oba-live-tool'
 const CDN_URL = 'https://fastly.jsdelivr.net/gh/'
 const PRODUCT_NAME = packageJson.name
+const UPDATE_NOT_CONFIGURED = '未配置更新源仓库（package.json repository），更新功能不可用'
+
+/**
+ * 更新源仓库信息，解析自 package.json 的 repository 字段。
+ * 未配置（url 为空）时返回 null，所有更新检查将被禁用。
+ */
+function getRepoInfo(): GithubRepo | null {
+  return parseGithubRepo(packageJson.repository)
+}
 
 const logger = createLogger('update')
 
@@ -103,11 +111,14 @@ const releaseNotes: Record<string, string> = {}
 let latestVersion: string | null = null
 
 async function getLatestVersion() {
+  const repo = getRepoInfo()
+  if (!repo) {
+    logger.debug('未配置更新源仓库，跳过更新检查')
+    return null
+  }
   try {
     // 从 package.json 获取最新版本号
-    const version = await fetch(
-      new URL(`${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json`, CDN_URL),
-    )
+    const version = await fetch(new URL(`${repo.owner}/${repo.repo}@main/package.json`, CDN_URL))
       .then(resp => resp.json())
       .then(data => data.version)
     logger.debug(`从 package.json 获取到的版本为 ${version}`)
@@ -123,9 +134,11 @@ async function fetchChangelog() {
   if (latestVersion && releaseNotes[latestVersion]) {
     return releaseNotes[latestVersion]
   }
+  const repo = getRepoInfo()
+  if (!repo) return undefined
   try {
     // 去 CDN 找
-    const changelogURL = new URL(`${GITHUB_OWNER}/${GITHUB_REPO}@main/CHANGELOG.md`, CDN_URL)
+    const changelogURL = new URL(`${repo.owner}/${repo.repo}@main/CHANGELOG.md`, CDN_URL)
     const changelogContent = await fetchWithRetry(changelogURL).then(res => res?.text())
     if (changelogContent) {
       // 找到新版本到当前版本的所有更新日志
@@ -142,9 +155,8 @@ async function fetchChangelog() {
   }
 }
 
-function getAssetsURL() {
-  const assetsURL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${latestVersion}/`
-  return assetsURL
+function getAssetsURL(repo: GithubRepo) {
+  return `https://github.com/${repo.owner}/${repo.repo}/releases/download/v${latestVersion}/`
 }
 
 interface Updater {
@@ -265,17 +277,27 @@ class WindowsUpdater implements Updater {
   }
 
   private async checkUpdateForGithub() {
+    const repo = getRepoInfo()
+    if (!repo) {
+      windowManager.send(IPC_CHANNELS.updater.updateError, { message: UPDATE_NOT_CONFIGURED })
+      return
+    }
     // github 不需要关闭 noCache，requestHeaders 默认就是 null
     this.autoUpdater.requestHeaders = null
     this.autoUpdater.setFeedURL({
       provider: 'github',
-      owner: GITHUB_OWNER,
-      repo: GITHUB_REPO,
+      owner: repo.owner,
+      repo: repo.repo,
     })
     return this.autoUpdater.checkForUpdates()
   }
 
   private async checkUpdateForGhProxy(source: string) {
+    const repo = getRepoInfo()
+    if (!repo) {
+      windowManager.send(IPC_CHANNELS.updater.updateError, { message: UPDATE_NOT_CONFIGURED })
+      return
+    }
     let sourceURL: URL
     try {
       sourceURL = new URL(source)
@@ -283,7 +305,7 @@ class WindowsUpdater implements Updater {
       const msg = `更新源设置错误，你的更新源为 ${source}`
       throw new Error(msg)
     }
-    const assetsURL = getAssetsURL()
+    const assetsURL = getAssetsURL(repo)
     // 自定义更新源
     this.autoUpdater.setFeedURL({
       provider: 'generic',
@@ -349,9 +371,14 @@ class MacOSUpdater implements Updater {
    * 所以干脆就手动下载 dmg 文件，下载完毕后退出应用，手动安装
    */
   public async checkForUpdates(source: string) {
+    const repo = getRepoInfo()
+    if (!repo) {
+      windowManager.send(IPC_CHANNELS.updater.updateError, { message: UPDATE_NOT_CONFIGURED })
+      return
+    }
     // 先从 latest-mac.yml 中获取目标文件
     try {
-      const assetsURL = getAssetsURL()
+      const assetsURL = getAssetsURL(repo)
       this.safeSource = source === 'github' ? '' : new URL(source).href
       this.assetsURL = assetsURL
       const latestYmlURL = `${this.safeSource}${new URL('latest-mac.yml', this.assetsURL)}`

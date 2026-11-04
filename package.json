@@ -6,6 +6,10 @@
   "description": "直播工具，用于直播带货，能自动弹窗，自动发言",
   "author": "qiutongxue",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
   "main": "dist-electron/main/index.js",
   "debug": {
     "env": {
