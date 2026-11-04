@@ -4,7 +4,7 @@ on:
     branches:
       - main
   workflow_dispatch:
-  
+
 jobs:
   repo-sync:
     runs-on: ubuntu-latest
@@ -15,10 +15,9 @@ jobs:
       - name: sync github -> gitee
         uses: Yikun/hub-mirror-action@master
         with:
-          src: 'github/${{ github.repository_owner }}'
-          dst: 'gitee/${{ secrets.GITEE_USERNAME }}'
+          src: "github/${{ github.repository_owner }}"
+          dst: "gitee/${{ secrets.GITEE_USERNAME }}"
           dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
-          dst_token:  ${{ secrets.GITEE_TOKEN }}
-          static_list: 'oba-live-tool'
+          dst_token: ${{ secrets.GITEE_TOKEN }}
+          static_list: "live-mod"
           force_update: true
-          

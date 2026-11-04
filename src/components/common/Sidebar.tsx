@@ -106,11 +106,11 @@ export default function Sidebar() {
         <div className="flex items-center gap-2.5 px-2 py-1.5">
           <img
             src="/favicon.png"
-            alt="直播助手"
+            alt="Live Mod"
             className="h-8 w-8 shrink-0 rounded-lg bg-background/60 p-0.5"
           />
           <div className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="truncate text-sm font-semibold">直播助手</span>
+            <span className="truncate text-sm font-semibold">Live Mod</span>
             <span className="truncate text-xs text-muted-foreground">v{APP_VERSION}</span>
           </div>
         </div>

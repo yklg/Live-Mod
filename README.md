@@ -1,17 +1,18 @@
 <div align="center">
 
-  <img src="./public/favicon.png" alt="logo" width="256px" height="auto">
-  <h1> oba live tool </h1>
-  <p> 抖音小店/巨量百应/抖音团购/小红书/视频号/快手小店/淘宝直播小工具 </p>
+  <img src="./public/favicon.png" alt="Live Mod" width="256px" height="auto">
+  <h1> Live Mod </h1>
+  <p> 直播带货小工具：自动弹窗 / 自动发言 / 自动回复 / AI 助手 </p>
   <br>
 
-[![GitHub Release][github release badge]](https://github.com/qiutongxue/oba-live-tool/releases/latest)
-![GitHub][github license badge]
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/qiutongxue/oba-live-tool)
- 
+[![GitHub license badge][github license badge]](#-许可证)
+
 </div>
 
 ---
+
+> [!NOTE]
+> **Live Mod** 基于 [qiutongxue/oba-live-tool](https://github.com/qiutongxue/oba-live-tool) 二次开发而来，感谢原作者 [@qiutongxue](https://github.com/qiutongxue) 的杰出工作。本项目同样遵循 MIT 许可证开源。
 
 ## 📸 界面预览
 
@@ -43,17 +44,20 @@
 
 ### 下载安装
 
-访问 [Releases](https://github.com/qiutongxue/oba-live-tool/releases/latest) 页面下载最新版本安装包
+Release 安装包将在开源仓库发布后提供，当前请通过[源码构建](#源码构建)。
 
 ### 源码构建
 
 ```bash
-git clone https://github.com/qiutongxue/oba-live-tool.git
-cd oba-live-tool
+git clone https://github.com/your-username/live-mod.git
+cd live-mod
 pnpm install
 pnpm build
 # 构建在项目根目录的 /release 文件夹下
 ```
+
+> [!NOTE]
+> 开源发布后，请将上方命令中的 `your-username` 替换为实际的 GitHub 用户名。
 
 
 ## 📖 使用方法
@@ -79,9 +83,9 @@ pnpm build
 #### 快捷键
 
 自动弹窗可设置快捷键映射一个或多个商品，按下快捷键后将按照快捷键设置的商品进行弹窗
-  - 快捷键`当且仅当`在自动弹窗页面激活，切换其它页面后将无法使用快捷键（包括全局快捷键）
-  - 全局快捷键：开启全局快捷键后，即使软件最小化后台运行也能正常使用。
-    - 注意：请务必使用**组合快捷键**，且不要和系统或其它软件的常用快捷键相同，避免造成键位冲突。
+- 快捷键`当且仅当`在自动弹窗页面激活，切换其它页面后将无法使用快捷键（包括全局快捷键）
+- 全局快捷键：开启全局快捷键后，即使软件最小化后台运行也能正常使用。
+  - 注意：请务必使用**组合快捷键**，且不要和系统或其它软件的常用快捷键相同，避免造成键位冲突。
 
 
 ### 自动发言
@@ -121,7 +125,7 @@ pnpm build
 
 #### 注意事项
 
-- 请预先在自动回复的**设置**里设置好要回复的内容 
+- 请预先在自动回复的**设置**里设置好要回复的内容
 - **关键词回复**和**AI回复**可以同时设置，在同时设置的情况下，若命中了关键词则优先使用关键词回复，未命中情况下才会执行AI回复
   - 若重复的**关键词**出现在多个规则中，优先使用序号靠前的规则
 - 入场、点赞等额外互动消息的自动回复等功能只有把入口设置为**罗盘大屏**时才生效
@@ -147,7 +151,7 @@ pnpm build
 > 
 > 回复内容2：@{用户名} 咱们142号链接就是蓝牙音响哦
 > 
-> *注*：`{用户名}`会被自动替换为实际的用户名
+> _注_：`{用户名}`会被自动替换为实际的用户名
 
 ##### AI回复
 
@@ -172,7 +176,7 @@ pnpm build
 ## 要求
 
 - 回复格式为：@<nickname第一个字符>*** <你的回复> （注意！：三个星号是必须的）
-...
+  ...
 ```
 
 #### WebSocket 服务
@@ -235,16 +239,9 @@ AI 助手只支持文本对话，在使用 AI 助手功能前，请先设置好�
 
 #### 软件更新
 
-当前暂时只通过 Github Release 分发。你可以选择或自定义加速代理源，当然，也只是普通的代理加速。
+Live Mod 默认**禁用**更新检查，避免 fork 版本误拉取上游更新。开源发布后，在 `package.json` 的 `repository.url` 中填入你的仓库地址（如 `git+https://github.com/your-username/live-mod.git`），应用即会从该仓库的 Release 检查并下载更新。
 
-设置自定义代理加速方式如下：
-
-1. 找到一个能够代理加速 github release 的站点，如 `gh-proxy.com`
-2. 查看站点提供的加速地址，如下载 1.5.20-windows-x64 版本的地址可以是 `https://gh-proxy.org/https://github.com/qiutongxue/oba-live-tool/releases/download/v1.5.20/oba-live-tool_1.5.20_windows_x64.exe`
-3. 把 `https://github.com/……` 及后面的链接删除，保留前缀 `https://gh-proxy.org/`
-4. 将前缀地址复制到自定义更新源输入框中
-
-亲测：Github 绝对可用。`gh-proxy.com` 偶尔可用。其余的github代理基本都不可用。
+手动下载安装包时同样可以使用 GitHub 加速代理，如下载 1.6.3-windows-x64 版本的地址可以是 `https://gh-proxy.org/https://github.com/your-username/live-mod/releases/download/v1.6.3/live-mod_1.6.3_windows_x64.exe`
 
 #### 开发者模式
 
@@ -252,16 +249,4 @@ AI 助手只支持文本对话，在使用 AI 助手功能前，请先设置好�
 
 ## 📑 许可证
 
-本项目遵循 MIT 许可证
-
-## Star History
-
-[![Star History Chart](https://star-history.dera.page/svg?repos=qiutongxue/oba-live-tool&type=Date)](https://star-history.dera.page/#qiutongxue/oba-live-tool&Date)
-
-<!-- badage -->
-
-[github release badge]: https://img.shields.io/github/v/release/qiutongxue/oba-live-tool?style=flat&logo=github&labelColor=%2324292e&color=%231a7f37
-
-
-[github license badge]: https://img.shields.io/badge/license-MIT-5c6bc0?style=flat&labelColor=24292e
-
+本项目及其上游 [oba-live-tool](https://github.com/qiutongxue/oba-live-tool) 均遵循 [MIT 许可证](./LICENSE)，上游原作者版权信息已完整保留。

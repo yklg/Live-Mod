@@ -89,7 +89,7 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
   win = new BrowserWindow({
-    title: `OBA 直播工具 - v${app.getVersion()}`,
+    title: `Live Mod - v${app.getVersion()}`,
     width: 1280,
     height: 800,
     minWidth: 1024,
