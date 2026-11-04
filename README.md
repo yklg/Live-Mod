@@ -49,15 +49,12 @@ Release 安装包将在开源仓库发布后提供，当前请通过[源码构�
 ### 源码构建
 
 ```bash
-git clone https://github.com/your-username/live-mod.git
-cd live-mod
+git clone https://github.com/yklg/Live-Mod.git
+cd Live-Mod
 pnpm install
 pnpm build
 # 构建在项目根目录的 /release 文件夹下
 ```
-
-> [!NOTE]
-> 开源发布后，请将上方命令中的 `your-username` 替换为实际的 GitHub 用户名。
 
 
 ## 📖 使用方法
@@ -239,9 +236,9 @@ AI 助手只支持文本对话，在使用 AI 助手功能前，请先设置好�
 
 #### 软件更新
 
-Live Mod 默认**禁用**更新检查，避免 fork 版本误拉取上游更新。开源发布后，在 `package.json` 的 `repository.url` 中填入你的仓库地址（如 `git+https://github.com/your-username/live-mod.git`），应用即会从该仓库的 Release 检查并下载更新。
+应用从 `package.json` 的 `repository.url`（当前为 `git+https://github.com/yklg/Live-Mod.git`）读取仓库地址，并从该仓库的 Release 检查并下载更新。
 
-手动下载安装包时同样可以使用 GitHub 加速代理，如下载 1.6.3-windows-x64 版本的地址可以是 `https://gh-proxy.org/https://github.com/your-username/live-mod/releases/download/v1.6.3/live-mod_1.6.3_windows_x64.exe`
+手动下载安装包时同样可以使用 GitHub 加速代理，如下载 1.6.3-windows-x64 版本的地址可以是 `https://gh-proxy.org/https://github.com/yklg/Live-Mod/releases/download/v1.6.3/live-mod_1.6.3_windows_x64.exe`
 
 #### 开发者模式
 

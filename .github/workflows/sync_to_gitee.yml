@@ -19,5 +19,5 @@ jobs:
           dst: "gitee/${{ secrets.GITEE_USERNAME }}"
           dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
           dst_token: ${{ secrets.GITEE_TOKEN }}
-          static_list: "live-mod"
+          static_list: "Live-Mod"
           force_update: true
