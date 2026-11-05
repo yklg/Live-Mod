@@ -177,7 +177,7 @@ pnpm build
 
 WebSocket 功能负责将监听到的评论信息广播到所有连接的客户端。可以在自动回复的设置页面中开启 WebSocket 服务，并配置相应的端口号。开启 WebSocket 并点击「开始监听」后，应用会自行启动 WebSocket **服务端**，绑定本机所有 ip 接口（`0.0.0.0`）。
 
-发送格式为 JSON 字符串，[类型定义参照这里](https://github.com/qiutongxue/oba-live-tool/blob/3c482728ac94ab33c76e072ed0424f9507a9dc3f/shared/types.d.ts#L84-L171)
+发送格式为 JSON 字符串，[类型定义参照这里](https://github.com/yklg/Live-Mod/blob/main/shared/types.d.ts)
 
 
 ### 发红包

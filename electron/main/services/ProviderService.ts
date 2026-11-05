@@ -10,8 +10,8 @@ import { createLogger } from '#/logger'
  * 修改这里可切换数据源仓库。
  */
 const REPO_INFO = {
-  owner: 'qiutongxue',
-  name: 'oba-live-tool',
+  owner: 'yklg',
+  name: 'Live-Mod',
   branch: 'main',
   file: 'providers.json',
 }

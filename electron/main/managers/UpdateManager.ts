@@ -8,7 +8,7 @@ import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from
 import { marked } from 'marked'
 import semver from 'semver'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { parseGithubRepo, type GithubRepo } from 'shared/repo'
+import { type GithubRepo, parseGithubRepo } from 'shared/repo'
 import * as yaml from 'yaml'
 import windowManager from '#/windowManager'
 import packageJson from '../../../package.json'
@@ -412,7 +412,7 @@ class MacOSUpdater implements Updater {
         throw new Error(message)
       }
       // 先检查本地是否已经有了这个文件（计算 Sha512）
-      this.savePath = path.join(app.getPath('downloads'), 'oba-update-setup.dmg')
+      this.savePath = path.join(app.getPath('downloads'), 'live-mod-update-setup.dmg')
       if (existsSync(this.savePath)) {
         const localFileSha512 = await this.calculateFileHash(this.savePath)
         logger.debug(`检测到本地文件，计算 Sha512 哈希值为 ${localFileSha512}`)
