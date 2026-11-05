@@ -11,9 +11,6 @@
 
 ---
 
-> [!NOTE]
-> **Live Mod** 基于 [qiutongxue/oba-live-tool](https://github.com/qiutongxue/oba-live-tool) 二次开发而来，感谢原作者 [@qiutongxue](https://github.com/qiutongxue) 的杰出工作。本项目同样遵循 MIT 许可证开源。
-
 ## 📸 界面预览
 
 ![主界面预览](./screenshot/main_page.png)
@@ -243,6 +240,10 @@ AI 助手只支持文本对话，在使用 AI 助手功能前，请先设置好�
 #### 开发者模式
 
 启用开发者模式后，可以使用鼠标右键菜单，在菜单中可打开开发者工具。
+
+> [!NOTE]
+> **Live Mod** 基于 [qiutongxue/oba-live-tool](https://github.com/qiutongxue/oba-live-tool) 二次开发而来，感谢原作者 [@qiutongxue](https://github.com/qiutongxue) 的杰出工作。本项目同样遵循 MIT 许可证开源。
+
 
 ## 📑 许可证
 
