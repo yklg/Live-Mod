@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.6.4
+
+### 🚀 Features
+
+- 全应用 UI 重构（现代轻量风）+ 工程基建 ([739fc85](https://github.com/yklg/Live-Mod/commit/739fc85))
+- 更新源改为 package.json.repository 可配置，未配置时禁用更新检查 ([d34b346](https://github.com/yklg/Live-Mod/commit/d34b346))
+- 重设计应用图标为「闪电直播窗」并生成三件套（svg/png/ico） ([bf817d2](https://github.com/yklg/Live-Mod/commit/bf817d2))
+- 项目更名为 Live Mod（appId/标题/侧栏/README/LICENSE/CI 同步更新） ([ce3003f](https://github.com/yklg/Live-Mod/commit/ce3003f))
+
+### 🐞 Bug Fixes
+
+- 图标四角白底问题——改用纯 Node SDF 软件光栅化，零外部渲染依赖 ([a4c2d14](https://github.com/yklg/Live-Mod/commit/a4c2d14))
+- 侧栏品牌图标打包后不显示——绝对路径改为相对路径 ([f951a60](https://github.com/yklg/Live-Mod/commit/f951a60))
+
 ## v1.6.3
 
 [compare changes](https://github.com/qiutongxue/oba-live-tool/compare/v1.6.1...v1.6.3)
@@ -317,4 +331,3 @@
 
 - 修复部分错误无法被正确捕捉的问题 ([c08c1e0](https://github.com/qiutongxue/oba-live-tool/commit/c08c1e0))
 - **自动发言:** 降低随机空格中空格出现的概率，随机发送时不和上一条重复, fix #120 ([#120](https://github.com/qiutongxue/oba-live-tool/issues/120))
-
