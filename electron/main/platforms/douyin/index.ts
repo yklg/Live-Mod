@@ -6,6 +6,7 @@ import {
   ElementNotFoundError,
   type PlatformError,
 } from '#/errors/PlatformError'
+import { createLogger } from '#/logger'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import { sleep } from '#/utils'
 import {
@@ -19,11 +20,13 @@ import {
 } from '../helper'
 import type {
   ICommentListener,
+  ILiveStatusWatcher,
   IPerformComment,
   IPerformPopup,
   IPlatform,
   ISendRedPacket,
 } from '../IPlatform'
+import { createLiveStatusWatcher } from '../liveStatusWatcher'
 import { CompassListener, ControlListener } from './commentListener'
 import { REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { douyinElementFinder as elementFinder } from './element-finder'
@@ -34,15 +37,23 @@ const PLATFORM_NAME = '抖音小店' as const
  * 抖音小店
  */
 export class DouyinPlatform
-  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, ISendRedPacket
+  implements
+    IPlatform,
+    IPerformPopup,
+    IPerformComment,
+    ICommentListener,
+    ISendRedPacket,
+    ILiveStatusWatcher
 {
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
   readonly _isCommentListener = true
   readonly _isSendRedPacket = true
+  readonly _isLiveStatusWatcher = true
 
   public mainPage: Page | null = null
   private commentListener: ICommentListener | null = null
+  private liveWatcher: { start(): void; stop(): void } | null = null
 
   async connect(browserSession: BrowserSession) {
     const { page } = browserSession
@@ -127,6 +138,30 @@ export class DouyinPlatform
 
   stopCommentListener(): void {
     this.commentListener?.stopCommentListener()
+  }
+
+  startLiveStatusWatch(onLiveEnd: () => void) {
+    this.liveWatcher = createLiveStatusWatcher({
+      getPage: () => this.mainPage,
+      signals: {
+        checkLive: async page => (await page.$(SELECTORS.LIVE_TAG)) !== null,
+        checkEnded: async page => {
+          const el = await page.$(SELECTORS.overlays.LIVE_OVER_CLOSE_BUTTON)
+          if (!el) return false
+          // 顺手点掉「直播总结」弹窗；点掉失败不阻断结束信号
+          await el.dispatchEvent('click').catch(() => {})
+          return true
+        },
+      },
+      onLiveEnd,
+      logger: createLogger('LiveStatus'),
+    })
+    this.liveWatcher.start()
+  }
+
+  stopLiveStatusWatch() {
+    this.liveWatcher?.stop()
+    this.liveWatcher = null
   }
 
   getCommentListenerPage(): Page {

@@ -46,6 +46,14 @@ function useGlobalIpcListener() {
     toast.error('直播控制台已断开连接')
   })
 
+  // 直播结束自动停止：统一复位该账号全部任务开关（部分任务类型无自发 stoppedEvent）
+  useIpcListener(IPC_CHANNELS.tasks.liveControl.liveEndedEvent, id => {
+    setIsRunningAutoMessage(id, false)
+    setIsRunningAutoPopUp(id, false)
+    setIsListening(id, 'stopped')
+    toast.error('直播已结束，所有任务已自动停止')
+  })
+
   useIpcListener(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, id => {
     setIsRunningAutoMessage(id, false)
     toast.error('自动发言已停止')

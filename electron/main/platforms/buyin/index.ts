@@ -1,6 +1,7 @@
 import { Result } from '@praha/byethrow'
 import type { Page } from 'playwright'
 import type { PlatformError } from '#/errors/PlatformError'
+import { createLogger } from '#/logger'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import { DouyinPlatform } from '../douyin'
 import { CompassListener, ControlListener } from '../douyin/commentListener'
@@ -8,11 +9,13 @@ import { CompassListener, ControlListener } from '../douyin/commentListener'
 import { connect, ensurePage, openUrlByElement } from '../helper'
 import type {
   ICommentListener,
+  ILiveStatusWatcher,
   IPerformComment,
   IPerformPopup,
   IPlatform,
   ISendRedPacket,
 } from '../IPlatform'
+import { createLiveStatusWatcher } from '../liveStatusWatcher'
 import { REGEXPS, SELECTORS, URLS } from './constant'
 
 const PLATFORM_NAME = '巨量百应' as const
@@ -21,15 +24,23 @@ const PLATFORM_NAME = '巨量百应' as const
  * 巨量百应
  */
 export class BuyinPlatform
-  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, ISendRedPacket
+  implements
+    IPlatform,
+    IPerformPopup,
+    IPerformComment,
+    ICommentListener,
+    ISendRedPacket,
+    ILiveStatusWatcher
 {
   readonly _isSendRedPacket = true
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
   readonly _isCommentListener = true
+  readonly _isLiveStatusWatcher = true
 
   private mainPage: Page | null = null
   private commentListener: ICommentListener | null = null
+  private liveWatcher: { start(): void; stop(): void } | null = null
 
   get platformName() {
     return PLATFORM_NAME
@@ -109,6 +120,30 @@ export class BuyinPlatform
 
   stopCommentListener(): void {
     this.commentListener?.stopCommentListener()
+  }
+
+  startLiveStatusWatch(onLiveEnd: () => void) {
+    // 选择器经 ...DY_SELECTORS 继承自抖店（直播总结弹窗/直播中 tag 两者同源）
+    this.liveWatcher = createLiveStatusWatcher({
+      getPage: () => this.mainPage,
+      signals: {
+        checkLive: async page => (await page.$(SELECTORS.LIVE_TAG)) !== null,
+        checkEnded: async page => {
+          const el = await page.$(SELECTORS.overlays.LIVE_OVER_CLOSE_BUTTON)
+          if (!el) return false
+          await el.dispatchEvent('click').catch(() => {})
+          return true
+        },
+      },
+      onLiveEnd,
+      logger: createLogger('LiveStatus'),
+    })
+    this.liveWatcher.start()
+  }
+
+  stopLiveStatusWatch() {
+    this.liveWatcher?.stop()
+    this.liveWatcher = null
   }
 
   getCommentListenerPage(): Page {

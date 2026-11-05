@@ -11,6 +11,8 @@ export default defineConfig({
     alias: {
       '@': path.join(dirname, 'src'),
       shared: path.join(dirname, 'shared'),
+      // 与 vite.config.ts 中 electron main 构建的别名一致，供主进程单测解析 '#/xxx'
+      '#': path.join(dirname, 'electron/main'),
     },
   },
   server: {
@@ -19,6 +21,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}', 'shared/**/*.test.{ts,tsx}'],
+    include: [
+      'src/**/*.test.{ts,tsx}',
+      'shared/**/*.test.{ts,tsx}',
+      'electron/main/**/*.test.{ts,tsx}',
+    ],
   },
 })

@@ -13,6 +13,7 @@ export interface IpcChannels {
   }) => boolean
   [IPC_CHANNELS.tasks.liveControl.disconnect]: (accountId: string) => boolean
   [IPC_CHANNELS.tasks.liveControl.disconnectedEvent]: (id: string) => void
+  [IPC_CHANNELS.tasks.liveControl.liveEndedEvent]: (id: string) => void
   [IPC_CHANNELS.tasks.liveControl.notifyAccountName]: (
     params:
       | {

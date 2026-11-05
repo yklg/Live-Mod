@@ -65,6 +65,19 @@ export function isSendRedPacket(platform: IPlatform): platform is IPlatform & IS
   return '_isSendRedPacket' in platform && platform._isSendRedPacket === true
 }
 
+export interface ILiveStatusWatcher {
+  _isLiveStatusWatcher: true
+  /** 监听直播状态，确认真实下播（非暂停）时触发一次 onLiveEnd */
+  startLiveStatusWatch(onLiveEnd: () => void): void
+  stopLiveStatusWatch(): void
+}
+
+export function isLiveStatusWatcher(
+  platform: IPlatform,
+): platform is IPlatform & ILiveStatusWatcher {
+  return '_isLiveStatusWatcher' in platform && platform._isLiveStatusWatcher === true
+}
+
 export interface IPlatform {
   get platformName(): string
   /** 连接到中控台，最终停留在中控台页面 */

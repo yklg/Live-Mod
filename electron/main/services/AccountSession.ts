@@ -1,4 +1,5 @@
 import { Result } from '@praha/byethrow'
+import { Notification } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { TaskNotSupportedError } from '#/errors/AppError'
 import { emitter } from '#/event/eventBus'
@@ -12,6 +13,7 @@ import { platformFactory } from '#/platforms'
 import {
   type IPlatform,
   isCommentListener,
+  isLiveStatusWatcher,
   isPerformComment,
   isPerformPopup,
   isPinComment,
@@ -29,6 +31,8 @@ export class AccountSession {
   private platform: IPlatform
   private browserSession: BrowserSession | null = null
   private activeTasks: Map<LiveControlTask['type'], ITask> = new Map()
+  // 直播结束处理重入守卫：connect 置 false，disconnect 置 true（会话关闭后不再响应结束信号）
+  private liveEndedHandled = true
 
   constructor(
     platformName: LiveControlPlatform,
@@ -39,6 +43,7 @@ export class AccountSession {
   }
 
   async connect(config: { headless?: boolean; storageState?: string }) {
+    this.liveEndedHandled = false
     let storageState: StorageState
     if (config.storageState) {
       this.logger.info('检测到已保存登录状态')
@@ -79,10 +84,36 @@ export class AccountSession {
     this.browserSession.page.on('close', () => {
       emitter.emit('page-closed', { accountId: this.account.id })
     })
+
+    // 直播结束自动停止：仅实现该能力的平台启用（抖音小店/巨量百应/测试平台）
+    if (isLiveStatusWatcher(this.platform)) {
+      this.platform.startLiveStatusWatch(() => this.handleLiveEnded())
+    }
+
     this.logger.success('成功与中控台建立连接')
   }
 
+  /**
+   * 检测到真实下播（非暂停）的统一处理：
+   * 通知渲染层（先于断开，保证「直播已结束」toast 在「已断开」之前）→ 系统通知 → 停止全部任务并断开
+   */
+  private handleLiveEnded() {
+    if (this.liveEndedHandled) return
+    this.liveEndedHandled = true
+    this.logger.warn('检测到直播已结束，自动停止所有任务并断开连接')
+    windowManager.send(IPC_CHANNELS.tasks.liveControl.liveEndedEvent, this.account.id)
+    new Notification({
+      title: '直播已结束',
+      body: `账号「${this.account.name}」的直播已结束，所有任务已自动停止`,
+    }).show()
+    this.disconnect()
+  }
+
   disconnect() {
+    this.liveEndedHandled = true
+    if (isLiveStatusWatcher(this.platform)) {
+      this.platform.stopLiveStatusWatch()
+    }
     this.logger.warn('与中控台断开连接')
     // 通过程序关闭浏览器（并非多余的操作，因为 MacOS 的 context 关闭时不会关闭浏览器进程）
     this.browserSession?.browser.close().catch(e => this.logger.error('无法关闭浏览器：', e))
@@ -145,7 +176,12 @@ export class AccountSession {
 
   public async sendRedPacket(duration: string): Result.ResultAsync<void, Error> {
     if (!isSendRedPacket(this.platform)) {
-      return Result.fail(new TaskNotSupportedError({ taskName: '一键发红包', targetName: this.platform.platformName }))
+      return Result.fail(
+        new TaskNotSupportedError({
+          taskName: '一键发红包',
+          targetName: this.platform.platformName,
+        }),
+      )
     }
     return this.platform.sendRedPacket(duration)
   }

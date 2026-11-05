@@ -6,20 +6,31 @@ import { createLogger } from '#/logger'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import { getRandomDouyinLiveMessage } from '#/utils'
 import { comment, ensurePage, getItemFromVirtualScroller, toggleButton } from '../helper'
-import type { ICommentListener, IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import type {
+  ICommentListener,
+  ILiveStatusWatcher,
+  IPerformComment,
+  IPerformPopup,
+  IPlatform,
+} from '../IPlatform'
+import { createLiveStatusWatcher } from '../liveStatusWatcher'
 import { devElementFinder as elementFinder } from './element-finder'
 
 const PLATFORM_NAME = '测试平台' as const
 
-export class DevPlatform implements IPlatform, IPerformComment, IPerformPopup, ICommentListener {
+export class DevPlatform
+  implements IPlatform, IPerformComment, IPerformPopup, ICommentListener, ILiveStatusWatcher
+{
   readonly _isPerformPopup = true
   readonly _isPerformComment = true
   readonly _isCommentListener = true
+  readonly _isLiveStatusWatcher = true
 
   private listenerTimer: ReturnType<typeof setInterval> | null = null
   private mainPage: Page | null = null
   private readonly logger = createLogger('DevPlatform')
   private documentWritten = false
+  private liveWatcher: { start(): void; stop(): void } | null = null
 
   startCommentListener(onComment: (comment: DouyinLiveMessage) => void) {
     const result = randomResult(
@@ -41,6 +52,26 @@ export class DevPlatform implements IPlatform, IPerformComment, IPerformPopup, I
       clearInterval(this.listenerTimer)
       this.listenerTimer = null
     }
+  }
+
+  startLiveStatusWatch(onLiveEnd: () => void) {
+    this.liveWatcher = createLiveStatusWatcher({
+      getPage: () => this.mainPage,
+      signals: {
+        // dev.html 顶栏开关按钮：直播中文案为「结束直播」
+        checkLive: async page => (await page.$('button:has-text("结束直播")')) !== null,
+        // 模拟中控台没有「直播总结」弹窗，仅用缺席信号
+        checkEnded: async () => false,
+      },
+      onLiveEnd,
+      logger: this.logger,
+    })
+    this.liveWatcher.start()
+  }
+
+  stopLiveStatusWatch() {
+    this.liveWatcher?.stop()
+    this.liveWatcher = null
   }
 
   async performPopup(id: number, signal?: AbortSignal) {
@@ -91,12 +122,8 @@ export class DevPlatform implements IPlatform, IPerformComment, IPerformPopup, I
       this.documentWritten = true
     }
     const isConnect = await Promise.race([
-      browserSession.page
-        .waitForSelector('.top-nav')
-        .then(() => true), // 中控台
-      browserSession.page
-        .waitForSelector('.login-form__btn-submit')
-        .then(() => false), // 登录
+      browserSession.page.waitForSelector('.top-nav').then(() => true), // 中控台
+      browserSession.page.waitForSelector('.login-form__btn-submit').then(() => false), // 登录
     ])
     if (isConnect) {
       this.mainPage = browserSession.page

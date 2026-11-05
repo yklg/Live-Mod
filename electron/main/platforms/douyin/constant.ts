@@ -49,6 +49,8 @@ export const SELECTORS = {
   NEW_COMMENT_LABEL: '[class^="newCommentLabel"]',
   /** 电商罗盘已登录状态 */
   COMPASS_LOGGED_IN: `div[class^="userName"]`,
+  /** 【直播中】tag：抖店和百应都有，存在即正在直播（直播状态 watcher 的「直播中」信号） */
+  LIVE_TAG: 'span[class^="liveTag"]',
 } as const
 
 export const TEXTS = {

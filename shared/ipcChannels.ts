@@ -5,6 +5,7 @@ export const IPC_CHANNELS = {
       notifyAccountName: 'tasks:liveControl:notifyAccountName',
       disconnect: 'tasks:liveControl:disconnect',
       disconnectedEvent: 'tasks:liveControl:disconnectedEvent',
+      liveEndedEvent: 'tasks:liveControl:liveEndedEvent',
     },
     autoMessage: {
       start: 'tasks:autoMessage:start',
