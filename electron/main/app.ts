@@ -2,7 +2,7 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { emitter } from './event/eventBus'
 import { updateManager } from './managers/UpdateManager'
@@ -94,7 +94,10 @@ async function createWindow() {
     height: 800,
     minWidth: 1024,
     minHeight: 700,
-    backgroundColor: '#ffffff',
+    // 内容首帧就绪前不显示窗口（配合下方 ready-to-show），消除启动闪屏
+    show: false,
+    // 原生窗口背景与渲染层主题 token 对齐（src/index.css --background），仅在就绪前极端时序下可见
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#020817' : '#ffffff',
     autoHideMenuBar: app.isPackaged,
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
@@ -109,6 +112,17 @@ async function createWindow() {
   })
 
   windowManager.setMainWindow(win)
+
+  // 内容就绪后再显示；主框架加载失败或渲染进程早期崩溃时兜底显示，避免窗口永久隐藏
+  win.once('ready-to-show', () => {
+    if (win && !win.isDestroyed()) win.show()
+  })
+  win.webContents.on('did-fail-load', (_event, _code, _desc, _url, isMainFrame) => {
+    if (isMainFrame && win && !win.isDestroyed() && !win.isVisible()) win.show()
+  })
+  win.webContents.on('render-process-gone', () => {
+    if (win && !win.isDestroyed() && !win.isVisible()) win.show()
+  })
 
   if (VITE_DEV_SERVER_URL) {
     // #298
@@ -165,7 +179,27 @@ app.on('activate', () => {
   }
 })
 
+// stdout/stderr 管道断裂（如从终端启动后终端被关闭、后台宿主断开管道）对 GUI 应用是
+// 正常情况：窗口交互不受影响。若不拦截，每次向已关闭的管道写日志都会抛出 EPIPE 并
+// 触发下方 uncaughtException 弹窗，造成错误框轰炸。此处静默忽略 EPIPE，其余错误照常抛出。
+function ignoreStdioEpipe(stream: NodeJS.WriteStream | null) {
+  stream?.on?.('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') return
+    throw err
+  })
+}
+ignoreStdioEpipe(process.stdout)
+ignoreStdioEpipe(process.stderr)
+
 process.on('uncaughtException', error => {
+  // stdio 管道断裂已由 ignoreStdioEpipe 拦截，此处兜底过滤其它来源的 EPIPE，不弹窗
+  if (
+    (error as NodeJS.ErrnoException)?.code === 'EPIPE' ||
+    (error instanceof Error && error.message.includes('EPIPE'))
+  ) {
+    createLogger('uncaughtException').verbose('忽略管道断裂 (EPIPE)，GUI 功能不受影响')
+    return
+  }
   const logger = createLogger('uncaughtException')
   logger.error('--------------意外的未捕获异常---------------')
   logger.error(error)

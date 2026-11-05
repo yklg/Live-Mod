@@ -15,5 +15,3 @@ ReactDOM.createRoot(document.getElementById('root') ?? document.createElement('d
     <RouterProvider router={router} />
   </React.StrictMode>,
 )
-
-postMessage({ payload: 'removeLoading' }, '*')
