@@ -33,6 +33,10 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install
+        env:
+          # 单测只跑源码：跳过 Electron 二进制下载/安装（pnpm 10 默认也不执行依赖构建脚本），
+          # 若测试误 import 真实 electron，应由 vi.mock 隔离而不是依赖二进制存在。
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
       - name: Run unit tests
         run: pnpm exec vitest run

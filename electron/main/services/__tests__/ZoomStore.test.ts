@@ -1,13 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  getZoomStorePath,
   loadZoomFactor,
   parseZoomMemory,
   saveZoomFactor,
   serializeZoomMemory,
   ZOOM_MEMORY_VERSION,
+  ZOOM_STORE_FILE,
   type ZoomStoreIo,
 } from '#/services/ZoomStore'
 import { ZOOM_DEFAULT } from '#/windows/pageZoom'
+
+// 主进程无 Electron 运行时（vitest）——仅 mock getPath('userData')，与 EntryStore.test 同构。
+// 本模块顶层 import { app } from 'electron'：CI 的 pnpm 默认不跑依赖构建脚本（无 electron 二进制），
+// 未 mock 会在 import 阶段抛 "Electron failed to install correctly"（Unit Tests 红）。
+vi.mock('electron', () => ({ app: { getPath: vi.fn(() => '/mock/userData') } }))
 
 // ===== 缩放记忆持久化（验证期用户反馈：按站点记住缩放） =====
 // 契约：parse 对非法/版本不符/畸形值降级为空记忆；load 未记录=默认 1；save 默认值落盘时删除该 host。
@@ -23,7 +30,11 @@ function memoryIo(initial: string | null): { io: ZoomStoreIo; dump: () => string
   return { io, dump: () => content ?? '' }
 }
 
-describe('ZoomStore（TC-ZS1~ZS5）', () => {
+describe('ZoomStore（TC-ZS1~ZS6）', () => {
+  it('TC-ZS6 记忆文件路径：userData/shell-zoom.json（mock 注入下可测）', () => {
+    expect(getZoomStorePath()).toBe(`/mock/userData/${ZOOM_STORE_FILE}`)
+  })
+
   it('TC-ZS1 parse：空/非法 JSON/版本不符 → 空记忆（不抛）', () => {
     expect(parseZoomMemory(null).byHost).toEqual({})
     expect(parseZoomMemory('not json').byHost).toEqual({})
