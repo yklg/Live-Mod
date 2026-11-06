@@ -56,7 +56,9 @@ export class AccountSession {
     // attach 模式：壳窗口 + CDP attach 回 Electron 自身（R1'）；登录态活在 partition，不搬运 storageState
     this.browserSession =
       mode === 'attach'
-        ? await browserManager.createAttachedSession(this.account.id)
+        ? await browserManager.createAttachedSession(this.account.id, {
+            popupOrigins: this.platform.ownedOrigins,
+          })
         : await browserManager.createSession(config.headless, storageState)
 
     await this.ensureAuthenticated(this.browserSession, config.headless, mode)
@@ -199,6 +201,11 @@ export class AccountSession {
     } else {
       this.logger.warn('无法停止任务：未找到正在运行中的任务')
     }
+  }
+
+  /** 导航离开护栏查询（guangquan-shell-ui-parity v3 · P2-6）：该账号是否有运行中任务 */
+  public hasActiveTasks() {
+    return this.activeTasks.size > 0
   }
 
   public async sendRedPacket(duration: string): Result.ResultAsync<void, Error> {

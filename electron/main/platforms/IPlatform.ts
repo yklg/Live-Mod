@@ -80,6 +80,8 @@ export function isLiveStatusWatcher(
 
 export interface IPlatform {
   get platformName(): string
+  /** 本平台登录/中控链路可信域名后缀（attach 壳内跨域 fold 白名单；A5：域名知识归平台层） */
+  readonly ownedOrigins?: readonly string[]
   /** 连接到中控台，最终停留在中控台页面 */
   connect(browserSession: BrowserSession): Promise<boolean>
   /** 登录 */

@@ -16,7 +16,7 @@ import type {
   ISendRedPacket,
 } from '../IPlatform'
 import { createLiveStatusWatcher } from '../liveStatusWatcher'
-import { REGEXPS, SELECTORS, URLS } from './constant'
+import { OWNED_ORIGINS, REGEXPS, SELECTORS, URLS } from './constant'
 
 const PLATFORM_NAME = '巨量百应' as const
 
@@ -37,6 +37,7 @@ export class BuyinPlatform
   readonly _isPerformPopup = true
   readonly _isCommentListener = true
   readonly _isLiveStatusWatcher = true
+  readonly ownedOrigins = OWNED_ORIGINS
 
   private mainPage: Page | null = null
   private commentListener: ICommentListener | null = null
@@ -55,10 +56,13 @@ export class BuyinPlatform
     })
     if (isConnected) {
       // 2025.11 巨量百应的中控台和登录时一样，样式会乱，同样的解决方法
+      // attach 铁律：fold 回退返回原页面时禁止 close（同 douyin.login 注释）
       const newPage = await openUrlByElement(page, URLS.LIVE_CONTROL_PAGE)
       browserSession.page = newPage
       this.mainPage = newPage
-      await page.close()
+      if (newPage !== page) {
+        await page.close()
+      }
     }
     return isConnected
   }
@@ -67,8 +71,11 @@ export class BuyinPlatform
     // 进入登录页面
     // 巨量百应（2025.8）也有和抖店同样的问题
     // 解决方法：通过控件主动打开登录页面
+    // attach 铁律：fold 回退返回原页面时禁止 close（同 douyin.login 注释）
     const newPage = await openUrlByElement(browserSession.page, URLS.LOGIN_PAGE)
-    await browserSession.page.close()
+    if (newPage !== browserSession.page) {
+      await browserSession.page.close()
+    }
     browserSession.page = newPage
 
     await browserSession.page.waitForSelector(SELECTORS.LOGGED_IN, {

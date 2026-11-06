@@ -22,11 +22,13 @@ import { useAutoMessageStore } from './hooks/useAutoMessage'
 import { useAutoPopUpStore } from './hooks/useAutoPopUp'
 import { useAutoReply, useAutoReplyStore } from './hooks/useAutoReply'
 import { useChromeConfigStore } from './hooks/useChromeConfig'
+import { useConnectToLiveControl } from './hooks/useConnectToLiveControl'
 import { useLiveControlStore } from './hooks/useLiveControl'
 import { useToast } from './hooks/useToast'
 import { useUpdateConfigStore, useUpdateStore } from './hooks/useUpdate'
 
-function useGlobalIpcListener() {
+// 导出供 rail 入口复用（光圈式壳 A1：railView=完整业务树唯一宿主；chrome 入口禁止 import 本函数）
+export function useGlobalIpcListener() {
   const { handleComment } = useAutoReply()
   const { setIsListening } = useAutoReplyStore()
   const { setIsConnected, setAccountName } = useLiveControlStore()
@@ -36,6 +38,7 @@ function useGlobalIpcListener() {
   const enableAutoCheckUpdate = useUpdateConfigStore(s => s.enableAutoCheckUpdate)
   const handleUpdate = useUpdateStore.use.handleUpdate()
   const { toast } = useToast()
+  const { connectLiveControl } = useConnectToLiveControl()
 
   useIpcListener(IPC_CHANNELS.tasks.autoReply.showComment, ({ comment, accountId }) => {
     handleComment(comment, accountId)
@@ -77,6 +80,23 @@ function useGlobalIpcListener() {
       setAccountName(params.accountId, params.accountName || '')
     }
   })
+
+  // 壳入口平台选择器（shell-entry-platform-selector v1）：入口=纯展示，rail=业务编排。
+  // 选择即自动连接（复用唯一连接通道）；失败回退显示入口（入口显隐/记忆归主进程）。
+  useIpcListener(IPC_CHANNELS.shell.entryIntent, intent => {
+    void (async () => {
+      const ok = await connectLiveControl(intent.platform)
+      if (!ok) {
+        void window.ipcRenderer.invoke(IPC_CHANNELS.shell.entryReopen)
+      }
+    })()
+  })
+
+  // rail 完整业务树就绪握手：主进程据此裁决「恢复记忆 / 显示入口」。
+  // StrictMode 双调幂等（主进程侧幂等）；经典模式主进程 no-op，零副作用。
+  useEffect(() => {
+    void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railReady)
+  }, [])
 
   useIpcListener(IPC_CHANNELS.app.notifyUpdate, info => {
     if (enableAutoCheckUpdate) {

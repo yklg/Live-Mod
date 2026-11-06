@@ -25,6 +25,8 @@ interface ChromeConfig {
   headless: boolean
   /** 壳模式（R1' attach 驱动）：旧持久化数据无此字段 = undefined = 关闭，无需迁移 */
   shellMode: boolean
+  /** 强制外部浏览器逃生口（v3·仅壳 UI 形态生效）：同 shellMode 无迁移先例，undefined = false */
+  forceExternal: boolean
 }
 
 interface ChromeConfigStore {
@@ -33,6 +35,7 @@ interface ChromeConfigStore {
   setStorageState: (accountId: string, storageState: string) => void
   setHeadless: (accountId: string, headless: boolean) => void
   setShellMode: (accountId: string, shellMode: boolean) => void
+  setForceExternal: (accountId: string, forceExternal: boolean) => void
 }
 
 const defaultContext = (): ChromeConfig => ({
@@ -40,6 +43,7 @@ const defaultContext = (): ChromeConfig => ({
   storageState: '',
   headless: false,
   shellMode: false,
+  forceExternal: false,
 })
 
 export const useChromeConfigStore = create<ChromeConfigStore>()(
@@ -83,6 +87,12 @@ export const useChromeConfigStore = create<ChromeConfigStore>()(
           set(state => {
             const context = ensureContext(state, accountId)
             context.shellMode = shellMode
+          })
+        },
+        setForceExternal: (accountId, forceExternal) => {
+          set(state => {
+            const context = ensureContext(state, accountId)
+            context.forceExternal = forceExternal
           })
         },
       }
@@ -147,6 +157,7 @@ export function useCurrentChromeConfigActions() {
   const setStorageState = useChromeConfigStore(state => state.setStorageState)
   const setHeadless = useChromeConfigStore(state => state.setHeadless)
   const setShellMode = useChromeConfigStore(state => state.setShellMode)
+  const setForceExternal = useChromeConfigStore(state => state.setForceExternal)
   const currentAccountId = useAccounts(state => state.currentAccountId)
 
   return useMemo(
@@ -155,7 +166,9 @@ export function useCurrentChromeConfigActions() {
       setStorageState: (storageState: string) => setStorageState(currentAccountId, storageState),
       setHeadless: (headless: boolean) => setHeadless(currentAccountId, headless),
       setShellMode: (shellMode: boolean) => setShellMode(currentAccountId, shellMode),
+      setForceExternal: (forceExternal: boolean) =>
+        setForceExternal(currentAccountId, forceExternal),
     }),
-    [currentAccountId, setPath, setStorageState, setHeadless, setShellMode],
+    [currentAccountId, setPath, setStorageState, setHeadless, setShellMode, setForceExternal],
   )
 }

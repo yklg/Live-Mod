@@ -1,5 +1,8 @@
 import { SELECTORS as DY_SELECTORS } from '../douyin/constant'
 
+/** attach 壳内可信域名：百应登录链路会跨到 douyinec.com，必须 fold 入壳内（真实缺陷回归点） */
+export const OWNED_ORIGINS = ['jinritemai.com', 'douyinec.com'] as const
+
 export const URLS = {
   LIVE_CONTROL_PAGE: 'https://buyin.jinritemai.com/dashboard/live/control',
   LOGIN_PAGE: 'https://buyin.jinritemai.com/mpa/account/login?log_out=1&type=24',

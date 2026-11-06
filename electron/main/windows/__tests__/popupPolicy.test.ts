@@ -72,3 +72,43 @@ describe('classifyPopup 三段决策（TC-PP1~PP10）', () => {
     expect(V('https://a.com/p?x=1#h', 'https://a.com/p?y=2')).toBe('deny-selfdup')
   })
 })
+
+// 壳内登录 v1（真实缺陷回归）：百应登录链路跨域 douyinec.com ↔ buyin.jinritemai.com，
+// 旧策略把跨域弹窗判为 external → attach 登录页逃逸到系统浏览器（入口选百应即复现）。
+// 修复：平台层注入 ownedOrigins，受信域后缀命中 → fold 入壳内；未注入时保持原有 external 语义。
+describe('classifyPopup 跨域可信域 fold（TC-PP11~PP14）', () => {
+  const owned = ['jinritemai.com', 'douyinec.com'] as const
+  const VO = (currentUrl: string, popupUrl: string, origins: readonly string[] = owned) =>
+    classifyPopup({ currentUrl, popupUrl, carrier: 'view', ownedOrigins: origins })
+
+  it('TC-PP11 跨域但属平台可信域 → fold（百应 douyinec → buyin 登录页）', () => {
+    expect(
+      VO(
+        'https://www.douyinec.com/',
+        'https://buyin.jinritemai.com/mpa/account/login?log_out=1&type=24',
+      ),
+    ).toBe('fold')
+  })
+
+  it('TC-PP12 未注入 ownedOrigins → 仍 external（launched/其它路径零行为变化）', () => {
+    expect(V('https://www.douyinec.com/', 'https://buyin.jinritemai.com/mpa/account/login')).toBe(
+      'external',
+    )
+  })
+
+  it('TC-PP13 后缀匹配必须带点边界：eviljinritemai.com ≠ 受信域', () => {
+    expect(VO('https://www.douyinec.com/', 'https://eviljinritemai.com/login')).toBe('external')
+    expect(VO('https://www.douyinec.com/', 'https://sub.buyin.jinritemai.com/x')).toBe('fold')
+  })
+
+  it('TC-PP14 window 承载体不受 ownedOrigins 影响（恒 allow，Phase 1 行为锚）', () => {
+    expect(
+      classifyPopup({
+        currentUrl: 'https://www.douyinec.com/',
+        popupUrl: 'https://buyin.jinritemai.com/mpa/account/login',
+        carrier: 'window',
+        ownedOrigins: owned,
+      }),
+    ).toBe('allow')
+  })
+})

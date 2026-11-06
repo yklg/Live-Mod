@@ -28,7 +28,7 @@ import type {
 } from '../IPlatform'
 import { createLiveStatusWatcher } from '../liveStatusWatcher'
 import { CompassListener, ControlListener } from './commentListener'
-import { REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
+import { OWNED_ORIGINS, REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { douyinElementFinder as elementFinder } from './element-finder'
 
 const PLATFORM_NAME = '抖音小店' as const
@@ -50,6 +50,7 @@ export class DouyinPlatform
   readonly _isCommentListener = true
   readonly _isSendRedPacket = true
   readonly _isLiveStatusWatcher = true
+  readonly ownedOrigins = OWNED_ORIGINS
 
   public mainPage: Page | null = null
   private commentListener: ICommentListener | null = null
@@ -77,8 +78,12 @@ export class DouyinPlatform
     // 进入登录页面
     // 抖店目前 (2025.6.29) 有一个小反爬，会打乱登录页面的样式
     // 解决方法：通过控件主动打开登录页面
+    // attach 铁律：弹窗被 fold 时 openUrlByElement 回退返回原页面——此时禁止 close 原页面
+    //（close 后 session.page 即已死对象，waitForSelector 必抛 Target closed；launched popup 秒到不受影响）
     const newPage = await openUrlByElement(browserSession.page, URLS.LOGIN_PAGE)
-    await browserSession.page.close()
+    if (newPage !== browserSession.page) {
+      await browserSession.page.close()
+    }
     browserSession.page = newPage
 
     await browserSession.page.waitForSelector(SELECTORS.LOGGED_IN, {

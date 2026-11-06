@@ -2,10 +2,14 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import type { IpcChannels } from 'shared/electron-api'
 
+/** 具名推送目标（A4：显式路由，无通道前缀魔法字符串） */
+export type PushTarget = 'ui' | 'chrome'
+
 class WindowManager {
   private mainWindow?: BrowserWindow
-  /** 壳容器模式（Phase 2）：React 应用迁移至 panelView，main→renderer 推送改路由到其 webContents */
-  private uiTarget?: WebContents
+  /** 壳容器模式（Phase 2）：React 应用迁移出主窗口 webContents，main→renderer 推送改路由到具名目标。
+   *  ui = 业务树（v3 分栏 panelView / 光圈式 railView）；chrome = 壳顶栏入口（仅光圈式形态注册）。 */
+  private targets: Partial<Record<PushTarget, WebContents>> = {}
 
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win
@@ -17,25 +21,38 @@ class WindowManager {
   }
 
   setUITarget(wc: WebContents) {
-    this.uiTarget = wc
+    this.targets.ui = wc
+  }
+
+  setTarget(name: PushTarget, wc: WebContents) {
+    this.targets[name] = wc
   }
 
   clearUITarget() {
-    this.uiTarget = undefined
+    this.targets = {}
   }
 
   send<Channel extends keyof IpcChannels>(
     channel: Channel,
     ...args: Parameters<IpcChannels[Channel]>
   ): boolean {
-    const target =
-      this.uiTarget && !this.uiTarget.isDestroyed()
-        ? this.uiTarget
-        : this.mainWindow && !this.mainWindow.isDestroyed()
+    return this.sendTo('ui', channel, ...args)
+  }
+
+  sendTo<Channel extends keyof IpcChannels>(
+    target: PushTarget,
+    channel: Channel,
+    ...args: Parameters<IpcChannels[Channel]>
+  ): boolean {
+    const named = this.targets[target]
+    const resolved =
+      named && !named.isDestroyed()
+        ? named
+        : target === 'ui' && this.mainWindow && !this.mainWindow.isDestroyed()
           ? this.mainWindow.webContents
           : undefined
-    if (!target) return false
-    target.send(channel, ...args)
+    if (!resolved) return false
+    resolved.send(channel, ...args)
     return true
   }
 }

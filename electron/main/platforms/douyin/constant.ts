@@ -1,3 +1,6 @@
+/** attach 壳内可信域名：登录/中控跨域时 fold 入壳内，不外开系统浏览器 */
+export const OWNED_ORIGINS = ['jinritemai.com'] as const
+
 export const URLS = {
   LIVE_CONTROL_PAGE: 'https://fxg.jinritemai.com/ffa/buyin/dashboard/live/control',
   LOGIN_PAGE:

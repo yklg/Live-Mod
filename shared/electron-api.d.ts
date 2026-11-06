@@ -136,6 +136,59 @@ export interface IpcChannels {
 
   // Log
   [IPC_CHANNELS.log]: (message: LogMessage) => void
+
+  // Shell（光圈式壳界面 guangquan-shell-ui-parity v3）
+  [IPC_CHANNELS.shell.tabCreate]: (params: { url?: string; accountId?: string }) => number
+  [IPC_CHANNELS.shell.tabClose]: (id: number) => void
+  [IPC_CHANNELS.shell.tabActivate]: (id: number) => void
+  [IPC_CHANNELS.shell.tabNavigate]: (id: number, url: string) => Promise<void>
+  [IPC_CHANNELS.shell.tabBack]: (id: number) => void
+  [IPC_CHANNELS.shell.tabForward]: (id: number) => void
+  [IPC_CHANNELS.shell.tabReload]: (id: number) => void
+  [IPC_CHANNELS.shell.tabsList]: () => ShellTabsState
+  [IPC_CHANNELS.shell.tabsState]: (state: ShellTabsState) => void
+  [IPC_CHANNELS.shell.windowMinimize]: () => void
+  [IPC_CHANNELS.shell.windowMaximize]: () => void
+  [IPC_CHANNELS.shell.windowClose]: () => void
+  [IPC_CHANNELS.shell.railToggle]: (routeId?: string | null) => void
+  [IPC_CHANNELS.shell.railState]: (state: ShellRailState) => void
+  [IPC_CHANNELS.shell.warnToast]: (message: string) => void
+  [IPC_CHANNELS.shell.uiStatus]: () => boolean
+  [IPC_CHANNELS.shell.resetLoginState]: (accountId: string) => Promise<void>
+  // 壳入口平台选择器（shell-entry-platform-selector v1）：
+  // 入口=纯展示（拉目录/发选择/跳过）；intent→rail 完整业务树编排连接（单一连接通道）
+  [IPC_CHANNELS.shell.entryCatalog]: () => ShellEntryCatalog
+  [IPC_CHANNELS.shell.entrySelect]: (params: {
+    platform: LiveControlPlatform
+    remember: boolean
+  }) => { ok: boolean; reason?: 'unknown' | 'unsupported' | 'shell-disabled' }
+  [IPC_CHANNELS.shell.entryIntent]: (intent: {
+    platform: LiveControlPlatform
+    source: 'manual' | 'restore'
+  }) => void
+  [IPC_CHANNELS.shell.entrySkip]: () => void
+  [IPC_CHANNELS.shell.entryReopen]: () => void
+  [IPC_CHANNELS.shell.railReady]: () => void
+}
+
+export interface ShellTabInfo {
+  id: number
+  title: string
+  url: string
+  loading: boolean
+  canBack: boolean
+  canForward: boolean
+  active: boolean
+}
+
+export interface ShellTabsState {
+  tabs: ShellTabInfo[]
+  activeId: number
+}
+
+export interface ShellRailState {
+  panelOpen: boolean
+  routeId: string | null
 }
 
 export interface ElectronAPI {

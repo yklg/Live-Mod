@@ -8,6 +8,9 @@ export interface PopupInput {
   currentUrl: string
   popupUrl: string
   carrier: PopupCarrier
+  /** 平台层注入的本平台可信域名后缀（登录/中控链路跨域白名单）。
+   *  A5 边界：域名知识只属于平台层，壳层不得内建平台域名表——此处仅做后缀匹配消费。 */
+  ownedOrigins?: readonly string[]
 }
 
 /**
@@ -16,7 +19,12 @@ export interface PopupInput {
  * 任何无法分类的输入（畸形/当前页非 http(s)，含 about:blank#nonce 寻址阶段）归最保守档
  * deny-selfdup（I18：纯拒绝，不 fold 不外开）。
  */
-export function classifyPopup({ currentUrl, popupUrl, carrier }: PopupInput): PopupDecision {
+export function classifyPopup({
+  currentUrl,
+  popupUrl,
+  carrier,
+  ownedOrigins,
+}: PopupInput): PopupDecision {
   const cur = parseHttp(currentUrl)
   const pop = parseHttp(popupUrl)
   if (!cur || !pop) return 'deny-selfdup'
@@ -26,8 +34,22 @@ export function classifyPopup({ currentUrl, popupUrl, carrier }: PopupInput): Po
   }
   // window 承载体保持 allow（Phase 1 launched 语义行为锚，防误统一）
   if (carrier === 'window') return 'allow'
-  // view 承载体：同 host 异 path 业务弹窗折入当前页；异 host 外链走系统浏览器
-  return cur.host === pop.host ? 'fold' : 'external'
+  // view 承载体：同 host 异 path 业务弹窗折入当前页
+  if (cur.host === pop.host) return 'fold'
+  // 跨域但属本平台可信域（如百应登录 douyinec.com ↔ buyin.jinritemai.com）→ 折入壳内，
+  // 否则 attach 登录链路会逃逸到系统浏览器（真实缺陷：入口一键选百应 → 外部 Edge 打开登录页）
+  if (isOwnedHost(pop.host, ownedOrigins)) return 'fold'
+  return 'external'
+}
+
+/** 后缀匹配必须带点边界：eviljinritemai.com 不得命中 jinritemai.com */
+function isOwnedHost(host: string, origins?: readonly string[]): boolean {
+  if (!origins?.length) return false
+  const lower = host.toLowerCase()
+  return origins.some(o => {
+    const suffix = o.toLowerCase()
+    return lower === suffix || lower.endsWith(`.${suffix}`)
+  })
 }
 
 function parseHttp(u: string): URL | null {

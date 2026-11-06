@@ -70,12 +70,8 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : RENDERER_DIST
 
-// C2（browser-shell-formalization-plan v3 · Phase 0）：生产用随机端口（Chromium 仅绑 127.0.0.1），
-// dev 默认 9222 供 harness 复用；LM_CDP_PORT 可显式覆盖。attach 会话经 driver/cdpEndpoint 发现实际端口。
-app.commandLine.appendSwitch(
-  'remote-debugging-port',
-  process.env.LM_CDP_PORT ?? (app.isPackaged ? '0' : '9222'),
-)
+// C2：CDP 端口开关注入已上移至 index.ts 同步顶层（实证：动态 import 后注入不生效）。
+// attach 会话经 driver/cdpEndpoint 端口文件发现实际端口；LM_CDP_PORT 仅供 harness 覆盖。
 
 // Disable GPU Acceleration for Windows 7
 if (os.release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -93,12 +89,18 @@ const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
+  // 光圈式壳形态（guangquan-shell-ui-parity v3）：自定义标题栏跨平台分档；经典模式保持原生 frame 零变化
+  const shellUiMode = process.env.LM_SHELL_UI === '1'
   win = new BrowserWindow({
     title: `Live Mod - v${app.getVersion()}`,
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 700,
+    ...(shellUiMode && process.platform === 'win32' ? { frame: false } : {}),
+    ...(shellUiMode && process.platform === 'darwin'
+      ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 12, y: 13 } }
+      : {}),
     // 内容首帧就绪前不显示窗口（配合下方 ready-to-show），消除启动闪屏
     show: false,
     // 原生窗口背景与渲染层主题 token 对齐（src/index.css --background），仅在就绪前极端时序下可见
@@ -173,6 +175,11 @@ app
   .then(logStartupInfo)
   .then(() => providerService.initialize())
   .then(createWindow)
+  .catch(err => {
+    // 启动链失败必须显式暴露（此前无 catch：createWindow 拒绝被静默吞掉，窗口永不出现）
+    console.error('[app] 启动失败：', err)
+    createLogger('App').error('启动失败：', err)
+  })
 
 app.on('window-all-closed', async () => {
   win = null

@@ -1,0 +1,83 @@
+import { describe, expect, it } from 'vitest'
+import {
+  loadZoomFactor,
+  parseZoomMemory,
+  saveZoomFactor,
+  serializeZoomMemory,
+  ZOOM_MEMORY_VERSION,
+  type ZoomStoreIo,
+} from '#/services/ZoomStore'
+import { ZOOM_DEFAULT } from '#/windows/pageZoom'
+
+// ===== 缩放记忆持久化（验证期用户反馈：按站点记住缩放） =====
+// 契约：parse 对非法/版本不符/畸形值降级为空记忆；load 未记录=默认 1；save 默认值落盘时删除该 host。
+function memoryIo(initial: string | null): { io: ZoomStoreIo; dump: () => string } {
+  let content = initial
+  const io: ZoomStoreIo = {
+    path: '/tmp/zoom-test.json',
+    readFile: () => content,
+    writeFile: (_p, data) => {
+      content = data
+    },
+  }
+  return { io, dump: () => content ?? '' }
+}
+
+describe('ZoomStore（TC-ZS1~ZS5）', () => {
+  it('TC-ZS1 parse：空/非法 JSON/版本不符 → 空记忆（不抛）', () => {
+    expect(parseZoomMemory(null).byHost).toEqual({})
+    expect(parseZoomMemory('not json').byHost).toEqual({})
+    expect(parseZoomMemory(JSON.stringify({ version: 99, byHost: { a: 0.8 } })).byHost).toEqual({})
+    expect(parseZoomMemory(JSON.stringify({ version: ZOOM_MEMORY_VERSION })).byHost).toEqual({})
+  })
+
+  it('TC-ZS2 parse：非法 factor 过滤，合法值夹取归一', () => {
+    const raw = JSON.stringify({
+      version: ZOOM_MEMORY_VERSION,
+      byHost: { a: 0.75, b: 'x', c: 9, d: Number.NaN },
+    })
+    const m = parseZoomMemory(raw)
+    expect(m.byHost.a).toBe(0.75)
+    expect(m.byHost.b).toBeUndefined()
+    expect(m.byHost.c).toBe(2)
+    expect(Object.keys(m.byHost)).toEqual(expect.arrayContaining(['a']))
+  })
+
+  it('TC-ZS3 serialize→parse 往返一致', () => {
+    const memory = { version: ZOOM_MEMORY_VERSION, byHost: { 'buyin.jinritemai.com': 0.8 } }
+    expect(parseZoomMemory(serializeZoomMemory(memory))).toEqual(memory)
+  })
+
+  it('TC-ZS4 load：未记录 → 默认 1；读异常 → 默认 1（不阻断浏览）', () => {
+    expect(loadZoomFactor('unknown.host', memoryIo(null).io)).toBe(ZOOM_DEFAULT)
+    expect(
+      loadZoomFactor('a.com', {
+        path: '/tmp/x',
+        readFile: () => {
+          throw new Error('EACCES')
+        },
+      }),
+    ).toBe(ZOOM_DEFAULT)
+  })
+
+  it('TC-ZS5 save：记录/覆盖/恢复默认时删除 host；写异常 → false 不抛', () => {
+    const io = memoryIo(null)
+    expect(saveZoomFactor('a.com', 0.8, io.io)).toBe(true)
+    expect(loadZoomFactor('a.com', io.io)).toBe(0.8)
+    expect(saveZoomFactor('b.com', 1.2, io.io)).toBe(true)
+    expect(JSON.parse(io.dump()).byHost).toEqual({ 'a.com': 0.8, 'b.com': 1.2 })
+    // 恢复 100% → 删除该 host（文件不膨胀）
+    saveZoomFactor('a.com', 1, io.io)
+    expect(JSON.parse(io.dump()).byHost).toEqual({ 'b.com': 1.2 })
+    // 写失败：返回 false，不抛
+    expect(
+      saveZoomFactor('c.com', 0.9, {
+        path: '/tmp/x',
+        readFile: () => null,
+        writeFile: () => {
+          throw new Error('EACCES')
+        },
+      }),
+    ).toBe(false)
+  })
+})

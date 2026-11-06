@@ -196,3 +196,23 @@ declare type LiveMessage =
   | DouyinLiveMessage
   | XiaohongshuCommentLiveMessage
   | TaobaoCommentLiveMessage
+
+/** 壳入口平台目录条目（壳入口选择器唯一数据源，由主进程 catalog 下发；renderer 只读） */
+declare type ShellPlatformEntry = {
+  id: LiveControlPlatform
+  label: string
+  description: string
+  category: 'douyin' | 'other'
+  attachSupported: boolean
+  /** 本地官方图标标识：对应 public/platform-icons/{icon}.png */
+  icon: string
+}
+
+/** 壳入口目录快照（含记忆态，供选择器渲染「记住选择」开关） */
+declare type ShellEntryCatalog = {
+  platforms: ShellPlatformEntry[]
+  remembered: {
+    platform: LiveControlPlatform | null
+    autoRestore: boolean
+  }
+}

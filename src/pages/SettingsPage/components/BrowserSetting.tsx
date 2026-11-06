@@ -2,6 +2,7 @@ import { EraserIcon, FolderSearchIcon, SearchIcon } from 'lucide-react'
 import { useId, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { SimpleIconsGooglechrome, SimpleIconsMicrosoftedge } from '@/components/icons/simpleIcons'
+import { useAccounts } from '@/hooks/useAccounts'
 import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
 import { useToast } from '@/hooks/useToast'
 import {
@@ -34,9 +35,19 @@ export function BrowserSetting() {
   const [isDetecting, setIsDetecting] = useState(false)
   const [edgeFirst, setEdgeFirst] = useState(false)
   const { toast } = useToast()
+  const account = useAccounts(store => store.getCurrentAccount())
 
-  const handleCookiesReset = () => {
+  const handleCookiesReset = async () => {
     setStorageState('')
+    // v3·P1：attach 模式登录态在账号 Tab partition——壳 UI 形态必须一并清除，否则重置静默失效
+    try {
+      const uiStatus = await window.ipcRenderer.invoke(IPC_CHANNELS.shell.uiStatus)
+      if (uiStatus && account) {
+        await window.ipcRenderer.invoke(IPC_CHANNELS.shell.resetLoginState, account.id)
+      }
+    } catch {
+      // uiStatus 失败视为经典形态（计划 Assumptions），仅清 storageState
+    }
     toast.success('登录状态已重置')
   }
 
@@ -144,7 +155,7 @@ export function BrowserSetting() {
           <div className="space-y-1">
             <h4 className="text-sm font-medium leading-none">重置登录状态</h4>
             <p className="text-sm text-muted-foreground">
-              清除已保存的登录信息，下次启动时需要重新登录
+              清除已保存的登录信息（含壳内登录状态），下次启动时需要重新登录
             </p>
           </div>
           <AlertDialog>

@@ -85,9 +85,12 @@ class BrowserSessionManager {
    * pageFactory 按 nonce 精确寻址 → 会话组装。任务层拿到的 Page 与 launched 完全同形。
    * 失败一律归约 AttachSessionError，由 ipc 层执行 F3 降级回退。
    */
-  public async createAttachedSession(accountId: string): Promise<BrowserSession> {
+  public async createAttachedSession(
+    accountId: string,
+    opts?: { popupOrigins?: readonly string[] },
+  ): Promise<BrowserSession> {
     const logger = createLogger('AttachSession')
-    const handle = shellWindowManager.open(accountId)
+    const handle = shellWindowManager.open(accountId, opts)
 
     const endpoint = resolveCdpEndpoint({
       isDev: !app.isPackaged,

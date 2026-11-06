@@ -7,6 +7,7 @@ import { setupAutoReplyIpcHandlers } from './commentListener'
 import { setupLiveControlIpcHandlers } from './connection'
 import { setupPinCommentIpcHandler } from './pinComment'
 import { setupRedPacketIpcHandlers } from './redPacket'
+import { setupShellIpcHandlers } from './shell'
 import { setupUpdateIpcHandlers } from './update'
 
 setupLiveControlIpcHandlers()
@@ -19,3 +20,4 @@ setupAppIpcHandlers()
 setupUpdateIpcHandlers()
 setupPinCommentIpcHandler()
 setupRedPacketIpcHandlers()
+setupShellIpcHandlers()

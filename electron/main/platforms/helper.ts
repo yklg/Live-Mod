@@ -282,7 +282,9 @@ export function ensurePage(page: Page | null | undefined): Result.Result<Page, P
   return Result.succeed(page)
 }
 
-/** 通过 \<a\> 的点击打开新网页，主要是防止部分反爬的行为 */
+/** 通过 \<a\> 的点击打开新网页，主要是防止部分反爬的行为。
+ *  调用方契约（douyin/buyin login 同款）：返回值**可能等于传入的 page**（fold 回退路径），
+ *  关闭旧页前必须 `if (newPage !== page)` 判等——否则会把会话当前页关成死对象，后续 waitForSelector 必抛 Target closed。 */
 export async function openUrlByElement(page: Page, url: string) {
   const context = page.context()
   // 壳模式（attach）兼容：弹窗可能被壳层拦截（如自复制反嵌入规则），

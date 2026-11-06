@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveConnectMode } from '#/platforms/envMatrix'
+import {
+  defaultEnvMatrix,
+  resolveConnectMode,
+  SHELL_DEFAULT_ATTACH_PLATFORMS,
+} from '#/platforms/envMatrix'
 import { createRuntimeEnvState } from '#/platforms/runtimeEnvState'
 
 // ===== mode 裁决决策表（A3：消费点唯一）+ 静态/运行时两层分离（A2）=====
@@ -60,6 +64,94 @@ describe('resolveConnectMode 决策表（TC-U4）', () => {
       expect(resolveConnectMode(input)).toBe(expected)
     })
   }
+})
+
+// ===== 壳内默认层（shell-in-browser-login-default-attach v3 + shell-entry-platform-selector v1）=====
+// 优先级：payload ?? (shellUi && 白名单 ? attach（degraded 期除外） : 原链)
+describe('resolveConnectMode 壳 UI 默认层（TC-S1~S9）', () => {
+  it('TC-S1 [白名单固化] 抖音系三平台 = douyin + buyin + eos', () => {
+    expect([...SHELL_DEFAULT_ATTACH_PLATFORMS].sort()).toEqual(['buyin', 'douyin', 'eos'])
+  })
+  it('TC-S2 [shellUi + douyin + 无 payload] → attach（压过矩阵 launch）', () => {
+    expect(
+      resolveConnectMode({
+        platform: 'douyin',
+        degraded: false,
+        matrix: defaultEnvMatrix,
+        shellUiEnabled: true,
+      }),
+    ).toBe('attach')
+  })
+  it('TC-S3 [shellUi + buyin] → attach', () => {
+    expect(
+      resolveConnectMode({
+        platform: 'buyin',
+        degraded: false,
+        matrix: defaultEnvMatrix,
+        shellUiEnabled: true,
+      }),
+    ).toBe('attach')
+  })
+  it('TC-S4 [shellUi + 非白名单 kuaishou] → 矩阵裁决不变', () => {
+    expect(
+      resolveConnectMode({
+        platform: 'kuaishou',
+        degraded: false,
+        matrix: defaultEnvMatrix,
+        shellUiEnabled: true,
+      }),
+    ).toBe('launch')
+  })
+  it('TC-S5 [shellUi + 白名单 + degraded] → launch（降级期回外部，TTL 后自动回壳内）', () => {
+    expect(
+      resolveConnectMode({
+        platform: 'douyin',
+        degraded: true,
+        matrix: defaultEnvMatrix,
+        shellUiEnabled: true,
+      }),
+    ).toBe('launch')
+  })
+  it('TC-S6 [逃生口 payload=launch 赢过壳内默认层]', () => {
+    expect(
+      resolveConnectMode({
+        payloadMode: 'launch',
+        platform: 'douyin',
+        degraded: false,
+        matrix: defaultEnvMatrix,
+        shellUiEnabled: true,
+      }),
+    ).toBe('launch')
+  })
+  it('TC-S7 [shellUi=false 经典逐键不变]', () => {
+    for (const platform of ['douyin', 'buyin', 'kuaishou']) {
+      expect(resolveConnectMode({ platform, degraded: false, matrix: defaultEnvMatrix })).toBe(
+        defaultEnvMatrix[platform as keyof typeof defaultEnvMatrix] ?? 'launch',
+      )
+    }
+  })
+
+  // eos（抖音团购）纳入白名单依据：douyin-eos/login 优先 goto 登录页、无弹窗回退路径（attach 安全）
+  it('TC-S8 [shellUi + eos] → attach（抖音团购同链路，压过矩阵 launch）', () => {
+    expect(
+      resolveConnectMode({
+        platform: 'eos',
+        degraded: false,
+        matrix: defaultEnvMatrix,
+        shellUiEnabled: true,
+      }),
+    ).toBe('attach')
+  })
+  it('TC-S9 [shellUi + eos + degraded] → launch（降级期回外部，TTL 后自动回壳内）', () => {
+    expect(
+      resolveConnectMode({
+        platform: 'eos',
+        degraded: true,
+        matrix: defaultEnvMatrix,
+        shellUiEnabled: true,
+      }),
+    ).toBe('launch')
+  })
 })
 
 describe('runtimeEnvState（TC-U5 ~ TC-U6, TC-U13）', () => {

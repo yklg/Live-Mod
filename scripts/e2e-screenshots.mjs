@@ -2,7 +2,8 @@
 // 断言（用户已确认口径，2026-11-04）：
 //   F4 横向溢出——根级 scrollWidth + overflow-x:auto/scroll 容器枚举，违规计入退出码；
 //   F6 主题持久化（TC-13）——reload 后 .dark 类保持。
-// 前置：应用已以 remote-debugging-port 9222 启动（pnpm dev 自带；生产模式亦然）。
+// 前置：应用已以 remote-debugging-port 9222 启动（需显式 `LM_CDP_PORT=9222` 启动应用：
+//   默认已改为随机端口 + DevToolsActivePort 发现，dev/prod 均不再固定 9222）。
 // 运行：node scripts/e2e-screenshots.mjs
 import fs from 'node:fs'
 import path from 'node:path'

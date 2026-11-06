@@ -1,3 +1,6 @@
+/** attach 壳内可信域名（eos 登录/中控均在 douyin.com 域下） */
+export const OWNED_ORIGINS = ['douyin.com'] as const
+
 export const URLS = {
   LIVE_CONTROL: 'https://eos.douyin.com/livesite/live/current',
   LOGIN_PAGE: 'https://eos.douyin.com/livesite/login',

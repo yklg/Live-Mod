@@ -10,7 +10,7 @@ import {
   toggleButton,
 } from '../helper'
 import type { IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
-import { REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
+import { OWNED_ORIGINS, REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { douyinEosElementFinder as elementFinder } from './element-finder'
 
 const PLATFORM_NAME = '抖音团购' as const
@@ -21,6 +21,7 @@ const PLATFORM_NAME = '抖音团购' as const
 export class DouyinEosPlatform implements IPlatform, IPerformPopup, IPerformComment {
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
+  readonly ownedOrigins = OWNED_ORIGINS
   public mainPage: Page | null = null
 
   async connect(browserSession: BrowserSession) {

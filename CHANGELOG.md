@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### 🚀 Features
+
+- 光圈式壳界面：新增 chrome（顶栏）/ rail（右栏）双入口，壳内 Tab 统一管理（新建/关闭/切换/前进后退/刷新），右栏功能面板开合与「离开中控页」任务护栏，几何与面板状态由主进程单一真源裁决
+- 壳内登录默认化：壳 UI 形态下抖音小店/巨量百应连接默认在壳内 Tab 完成登录（attach），无需逐账号实验开关；新增「强制外部浏览器（调试用）」逃生口（与经典模式「壳模式」开关形态隔离互不生效）；attach 失败自动回退外部浏览器并经 rail toast 提示；新增 `uiStatus` / `resetLoginState` 通道，设置页「重置登录状态」在壳 UI 下同时清理壳内登录 partition
+- 壳入口平台选择器：壳 UI 启动先选平台（抖店 / 巨量百应 / 抖音团购，官方品牌图标），选择即自动在壳内打开对应直播控制台并连接；记住上次选择——下次启动跳过选择器直接恢复；中控台面板新增「切换平台」；eos（抖音团购）纳入壳内直连；平台/对象目录由主进程单一真源下发
+- 壳内页面缩放：`Cmd/Ctrl + =` 放大、`Cmd/Ctrl + -` 缩小、`Cmd/Ctrl + 0` 重置（50%–200%），按站点自动记忆（官方中控台 100% 时窗口裁切问题）；壳模式新增自定义应用菜单承载缩放（默认菜单 Zoom 角色对 WebContentsView 无效）
+
+### 🐞 Bug Fixes
+
+- 修复壳内 attach 登录时弹窗回退返回原页面后仍被关闭，导致登录等待 `waitForSelector` 抛 `Target closed`——抖音小店/巨量百应登录及百应中控台跳转改为 `newPage !== 原 page` 才关闭旧页（launched 模式弹窗语义不变）
+- 修复 CDP 调试端口在异步加载下不生效：`remote-debugging-port` 开关上移至主入口同步注入，默认随机端口（打包/开发一致，规避固定 9222 多实例冲突），attach 侧经 `DevToolsActivePort` 文件发现实际端口，`LM_CDP_PORT` 仍可显式固定供 harness 复用
+- 修复 `cdpEndpoint` 把端口文件第 2 行 `/devtools/browser/<id>` 拼进 wsEndpoint 导致 `connectOverCDP` 请求未知路径而 connect-failed——现仅返回 `http://127.0.0.1:{port}` 基址，第 2 行只作形状校验
+- 修复壳内官方页触发外部协议深链（如 `bytedance://dispatch_message/`）导致 macOS 弹「未设定用来打开 URL 的应用程序」：新增页面导航守卫，仅放行 `http(s)/about/data/blob`，其余协议拦截并记日志（pageView / 壳窗口 / 入口视图三类载体统一挂载）
+- 修复壳内 attach 时官方页跨域登录弹窗被判为外链、逃逸到系统浏览器（如百应 `douyinec.com ↔ buyin.jinritemai.com`）：平台层声明可信域名 `ownedOrigins` 并随会话注入，跨域但受信的登录/中控弹窗改为 fold 折入壳内
+
+### ⚠️ 契约变更（开源 fork 注意）
+
+- 壳通道 `shell:leaveWarn` 重命名为 `shell:warnToast`（语义泛化为通用「主进程 → rail」告警）：外部插件/脚本如有监听旧通道名需同步改名；旧名残留已由契约扫描测试保证为 0
+- 新增壳通道 `shell:entryCatalog` / `entrySelect` / `entryIntent` / `entrySkip` / `entryReopen` / `railReady`（shell 命名空间 17→23 键，契约测试同步）；classic 模式不触达、主进程 handler 内 no-op
+
 ## v1.6.4
 
 ### 🚀 Features

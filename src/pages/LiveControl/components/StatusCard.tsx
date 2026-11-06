@@ -7,10 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { useAccounts } from '@/hooks/useAccounts'
 import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
-import { useCurrentLiveControl, useCurrentLiveControlActions } from '@/hooks/useLiveControl'
-import { useToast } from '@/hooks/useToast'
+import { useConnectToLiveControl, useShellUiStatus } from '@/hooks/useConnectToLiveControl'
+import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import PlatformSelect from './PlatformSelect'
 
 const StatusAlert = React.memo(() => {
@@ -70,6 +69,7 @@ const StatusCard = React.memo(() => {
             <ConnectState />
             <div className="flex items-center gap-2">
               <PlatformSelect />
+              <PlatformSwitchButton />
               <ConnectToLiveControl />
             </div>
           </div>
@@ -83,65 +83,37 @@ const StatusCard = React.memo(() => {
   )
 })
 
-const ConnectToLiveControl = React.memo(() => {
-  const { setIsConnected } = useCurrentLiveControlActions()
-  const platform = useCurrentLiveControl(context => context.platform)
+/**
+ * 壳 UI 专属「切换平台」：重新打开入口平台选择器（入口显隐/记忆归主进程，幂等）。
+ * 经典模式无入口视图，不渲染；已连接（含连接中）时禁用，需先断开（计划 §6）。
+ */
+const PlatformSwitchButton = React.memo(() => {
+  const uiStatus = useShellUiStatus()
   const isConnected = useCurrentLiveControl(context => context.isConnected)
-  const chromePath = useCurrentChromeConfig(context => context.path)
-  const storageState = useCurrentChromeConfig(context => context.storageState)
-  const shellMode = useCurrentChromeConfig(context => context.shellMode ?? false)
-  let headless = useCurrentChromeConfig(context => context.headless)
-  const account = useAccounts(store => store.getCurrentAccount())
 
-  if (platform === 'taobao') {
-    headless = false
+  if (!uiStatus) {
+    return null
   }
 
-  const { toast } = useToast()
+  const disabled = isConnected !== 'disconnected'
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      title={disabled ? '请先断开连接' : '重新选择要连接的平台'}
+      onClick={() => {
+        void window.ipcRenderer.invoke(IPC_CHANNELS.shell.entryReopen)
+      }}
+    >
+      切换平台
+    </Button>
+  )
+})
 
-  const connectLiveControl = useMemoizedFn(async () => {
-    try {
-      if (!account) {
-        toast.error('找不到对应账号')
-        return
-      }
-      setIsConnected('connecting')
-      const result = await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.connect, {
-        headless,
-        chromePath,
-        storageState,
-        platform,
-        account,
-        // 壳模式：attach 驱动 Electron 自身壳窗口（R1'）；关闭时缺省交由主进程矩阵裁决
-        ...(shellMode ? { mode: 'attach' as const } : {}),
-      })
-
-      if (result) {
-        setIsConnected('connected')
-        toast.success('已连接到直播控制台')
-      } else {
-        throw new Error('连接直播控制台失败')
-      }
-    } catch (error) {
-      setIsConnected('disconnected')
-      toast.error(error instanceof Error ? error.message : '连接直播控制台失败')
-    }
-  })
-
-  const disconnectLiveControl = useMemoizedFn(async () => {
-    if (!account) {
-      toast.error('找不到对应账号')
-      return
-    }
-    try {
-      await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.disconnect, account.id)
-      toast.success('已断开连接')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '断开连接失败')
-    } finally {
-      setIsConnected('disconnected')
-    }
-  })
+const ConnectToLiveControl = React.memo(() => {
+  const { connectLiveControl, disconnectLiveControl } = useConnectToLiveControl()
+  const isConnected = useCurrentLiveControl(context => context.isConnected)
 
   const handleButtonClick = useMemoizedFn(() => {
     if (isConnected === 'connected') {
@@ -239,8 +211,29 @@ const HeadlessSetting = () => {
 
 const ShellModeSetting = () => {
   const shellMode = useCurrentChromeConfig(context => context.shellMode ?? false)
+  const forceExternal = useCurrentChromeConfig(context => context.forceExternal ?? false)
   const isConnected = useCurrentLiveControl(context => context.isConnected)
-  const { setShellMode } = useCurrentChromeConfigActions()
+  const { setShellMode, setForceExternal } = useCurrentChromeConfigActions()
+  const uiStatus = useShellUiStatus()
+
+  // v3 形态隔离：壳 UI 下开关语义为「强制外部浏览器（调试用）」逃生口；经典模式维持实验开关原语义
+  if (uiStatus) {
+    return (
+      <div className="flex justify-between items-center">
+        <div>
+          <div className="text-sm">强制外部浏览器（调试用）</div>
+          <div className="text-muted-foreground text-xs">
+            连接默认在壳内浏览器登录（抖音系）；开启后改由外部 Chrome/Edge 承载
+          </div>
+        </div>
+        <Switch
+          checked={forceExternal}
+          disabled={isConnected !== 'disconnected'}
+          onCheckedChange={v => setForceExternal(v)}
+        />
+      </div>
+    )
+  }
   return (
     <div className="flex justify-between items-center">
       <div>

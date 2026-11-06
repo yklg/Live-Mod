@@ -20,6 +20,20 @@ describe('resolveCdpEndpoint（TC-U7 ~ TC-U8）', () => {
     expect(r.wsEndpoint).toMatch(/^http:\/\/127\.0\.0\.1:57571/)
   })
 
+  // 壳内登录 v3 实证（缺陷 C 回归防线）：connectOverCDP 必须收到纯 HTTP 基址——
+  // 端口文件第 2 行 /devtools/browser/<id> 若被拼进 endpoint，Chromium http handler 会请求
+  // 未知路径 <id>/json/version/ 导致 connect-failed。此处用精确相等锁死形状（前缀正则挡不住）。
+  it('TC-U7c [精确形状] 端口文件分支 wsEndpoint 恰为 http 基址，不含 /devtools 路径', () => {
+    const r = resolveCdpEndpoint(ctx({ file: '57571\n/devtools/browser/93dc-abc\n' }))
+    expect(r.wsEndpoint).toBe('http://127.0.0.1:57571')
+    expect(r.wsEndpoint).not.toContain('/devtools')
+  })
+
+  it('TC-U7d [精确形状] dev 显式端口分支同款纯基址', () => {
+    const r = resolveCdpEndpoint(ctx({ isDev: true, envPort: '9222', file: null }))
+    expect(r.wsEndpoint).toBe('http://127.0.0.1:9222')
+  })
+
   it('TC-U7b [dev 固定端口] LM_CDP_PORT 优先于文件', () => {
     const r = resolveCdpEndpoint(
       ctx({ isDev: true, envPort: '9222', file: '57571\n/devtools/browser/x' }),

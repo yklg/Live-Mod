@@ -16,4 +16,13 @@ describe('isPanelMode（TC-M1~M3）', () => {
   it('TC-M3 hash 路由内参数仍可读（#/settings?view=panel）', () => {
     expect(isPanelMode('', '#/settings?view=panel')).toBe(true)
   })
+
+  // guangquan-shell-ui-parity v3 · P1-5 迁移：rail 入口豁免（view=rail 与 panel 双值兼容期）
+  it('TC-M4 [rail 豁免] view=rail search 与 hash 两态均 true；panel 兼容期不回归', () => {
+    expect(isPanelMode('?view=rail', '')).toBe(true)
+    expect(isPanelMode('', '#/auto-popup?view=rail')).toBe(true)
+    expect(isPanelMode('?view=panel', '')).toBe(true)
+    expect(isPanelMode('?view=chrome', '')).toBe(false) // chrome 入口不豁免（无业务页）
+    expect(isPanelMode('?view=other', '')).toBe(false)
+  })
 })

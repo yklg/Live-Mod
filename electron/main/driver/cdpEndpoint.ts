@@ -41,5 +41,8 @@ export function resolveCdpEndpoint(input: CdpEndpointInput): CdpEndpointResult {
   if (!validPort(port)) return { ok: false, reason: 'port-invalid' }
   if (!line2 || !line2.trim().startsWith('/')) return { ok: false, reason: 'port-file-malformed' }
 
-  return { ok: true, port, wsEndpoint: `http://127.0.0.1:${port}${line2.trim()}` }
+  // 实证修正（壳内登录 v3）：connectOverCDP 必须喂 HTTP 基址（内部经 /json/version 自取 ws URL）；
+  // 把端口文件第 2 行的 /devtools/browser/<id> 拼进 endpoint 会让 Chromium http handler
+  // 收到 <id>/json/version/ 未知路径 → connect-failed。line2 仅作形状校验，不进 endpoint。
+  return { ok: true, port, wsEndpoint: `http://127.0.0.1:${port}` }
 }

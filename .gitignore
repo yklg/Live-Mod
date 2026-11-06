@@ -52,3 +52,10 @@ preview/
 # Trae 分享产物
 .trae-html-share-packages/
 poc/shell/evidence/
+
+# 验收截图与构建缓存（本地证据，不入库）
+.screenshots/
+tsconfig.node.tsbuildinfo
+
+# pnpm 本地 store（hook 环境自建，不入库）
+.pnpm-store/
