@@ -83,7 +83,7 @@ export function EntrySelector() {
         <header className="mb-8 text-center">
           <h1 className="text-2xl font-semibold tracking-wide">选择要连接的平台</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            选择后将直接在壳内打开对应直播控制台，无需外部浏览器
+            选择后将直接在壳内打开对应直播控制台；首次连接需在壳内完成扫码登录
           </p>
         </header>
 
@@ -116,30 +116,24 @@ export function EntrySelector() {
                     data-platform={platform.id}
                     disabled={busyPlatform !== null}
                     onClick={() => void handleSelect(platform.id)}
-                    className="rounded-lg border border-border bg-card p-5 text-left transition-colors duration-150 hover:border-muted-foreground hover:shadow-sm disabled:pointer-events-none disabled:opacity-60"
+                    className="rounded-lg border border-border bg-card p-5 text-left transition-colors duration-150 hover:border-muted-foreground hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
                   >
                     <div className="flex items-start gap-3.5">
                       <img
                         src={`${PLATFORM_ICON_BASE}/${platform.icon}.png`}
                         alt={platform.label}
-                        className="size-12 shrink-0 rounded-[11px] object-contain"
+                        className="size-[52px] shrink-0 rounded-[11px] object-contain"
                       />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-base font-semibold">{platform.label}</span>
-                          {platform.attachSupported && (
-                            <span className="shrink-0 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
-                              壳内直连
-                            </span>
-                          )}
                         </div>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
                           {platform.description}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-                      <span>{busy ? '正在进入…' : '未登录将先进入扫码登录页'}</span>
+                    <div className="mt-4 flex items-center justify-end border-t border-border pt-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1 font-medium text-foreground">
                         {busy ? <Loader2 className="size-3.5 animate-spin" /> : '进入'}
                         {!busy && <ArrowRight className="size-3.5" />}
@@ -150,28 +144,31 @@ export function EntrySelector() {
               })}
             </div>
 
-            <div className="mt-6 flex items-center gap-3.5 rounded-lg border border-border bg-muted px-4 py-3.5">
+            <div className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium">启动时自动进入（记住选择）</p>
+                <p className="text-xs text-muted-foreground">
+                  下次启动将跳过此页，直接进入上次选择的平台
+                </p>
+              </div>
               <Switch
                 data-testid="entry-remember"
                 checked={remember}
                 onCheckedChange={setRemember}
                 aria-label="启动时自动进入（记住选择）"
               />
-              <div>
-                <p className="text-sm font-medium">启动时自动进入（记住选择）</p>
-                <p className="text-xs text-muted-foreground">
-                  下次启动将跳过此页，直接进入上次选择的平台
-                </p>
-              </div>
             </div>
 
-            {actionError && <p className="mt-3 text-center text-xs text-destructive">{actionError}</p>}
+            {actionError && (
+              <p className="mt-3 text-center text-xs text-destructive">{actionError}</p>
+            )}
 
             <div className="mt-6 flex flex-col items-center gap-3">
               <Button
                 data-testid="entry-skip"
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={handleSkip}
                 disabled={busyPlatform !== null}
               >
