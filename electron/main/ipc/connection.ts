@@ -1,7 +1,9 @@
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger } from '#/logger'
 import { accountManager } from '#/managers/AccountManager'
-import { browserManager } from '#/managers/BrowserSessionManager'
+import { AttachSessionError, browserManager } from '#/managers/BrowserSessionManager'
+import { defaultEnvMatrix, resolveConnectMode } from '#/platforms/envMatrix'
+import { runtimeEnvState } from '#/platforms/runtimeEnvState'
 import { typedIpcMainHandle } from '#/utils'
 
 const TASK_NAME = '中控台'
@@ -9,19 +11,39 @@ const TASK_NAME = '中控台'
 function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.liveControl.connect,
-    async (_, { chromePath, headless, storageState, platform, account }) => {
+    async (_, { chromePath, headless, storageState, platform, account, mode: payloadMode }) => {
+      const logger = createLogger(`@${account.name}`).scope(TASK_NAME)
       try {
         if (chromePath) {
           browserManager.setChromePath(chromePath)
         }
         const accountSession = accountManager.createSession(platform, account)
-        await accountSession.connect({
-          headless,
-          storageState,
+
+        // A3 裁决唯一消费点：payload.mode ?? 运行时降级 ?? 静态矩阵 ?? 'launch'
+        const mode = resolveConnectMode({
+          payloadMode,
+          platform,
+          degraded: runtimeEnvState.isDegraded(platform),
+          matrix: defaultEnvMatrix,
         })
+
+        try {
+          await accountSession.connect({ headless, storageState, mode })
+        } catch (error) {
+          // F3：attach 建立失败 → 运行时降级，本次请求内以 launch 重试一次
+          if (mode === 'attach') {
+            logger.warn(
+              'attach 会话建立失败，本次降级为 launch：',
+              error instanceof AttachSessionError ? error.reason : error,
+            )
+            runtimeEnvState.degrade(platform)
+            await accountSession.connect({ headless, storageState, mode: 'launch' })
+          } else {
+            throw error
+          }
+        }
         return true
       } catch (error) {
-        const logger = createLogger(`@${account.name}`).scope(TASK_NAME)
         logger.error('连接直播控制台失败：', error)
         accountManager.closeSession(account.id)
         return false

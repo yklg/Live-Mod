@@ -70,7 +70,12 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : RENDERER_DIST
 
-app.commandLine.appendSwitch('remote-debugging-port', '9222')
+// C2（browser-shell-formalization-plan v3 · Phase 0）：生产用随机端口（Chromium 仅绑 127.0.0.1），
+// dev 默认 9222 供 harness 复用；LM_CDP_PORT 可显式覆盖。attach 会话经 driver/cdpEndpoint 发现实际端口。
+app.commandLine.appendSwitch(
+  'remote-debugging-port',
+  process.env.LM_CDP_PORT ?? (app.isPackaged ? '0' : '9222'),
+)
 
 // Disable GPU Acceleration for Windows 7
 if (os.release().startsWith('6.1')) app.disableHardwareAcceleration()

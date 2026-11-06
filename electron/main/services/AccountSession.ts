@@ -1,6 +1,7 @@
 import { Result } from '@praha/byethrow'
 import { Notification } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { teardownSession } from '#/driver/types'
 import { TaskNotSupportedError } from '#/errors/AppError'
 import { emitter } from '#/event/eventBus'
 import { createLogger } from '#/logger'
@@ -10,6 +11,7 @@ import {
   type StorageState,
 } from '#/managers/BrowserSessionManager'
 import { platformFactory } from '#/platforms'
+import type { ExecMode } from '#/platforms/envMatrix'
 import {
   type IPlatform,
   isCommentListener,
@@ -26,6 +28,7 @@ import type { ITask } from '#/tasks/ITask'
 import { createPinCommentTask } from '#/tasks/PinCommentTask'
 import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import windowManager from '#/windowManager'
+import { shellWindowManager } from '#/windows/shellWindowManager'
 
 export class AccountSession {
   private platform: IPlatform
@@ -42,22 +45,30 @@ export class AccountSession {
     this.platform = new platformFactory[platformName]()
   }
 
-  async connect(config: { headless?: boolean; storageState?: string }) {
+  async connect(config: { headless?: boolean; storageState?: string; mode?: ExecMode }) {
     this.liveEndedHandled = false
+    const mode: ExecMode = config.mode ?? 'launch'
     let storageState: StorageState
     if (config.storageState) {
       this.logger.info('检测到已保存登录状态')
       storageState = JSON.parse(config.storageState)
     }
 
-    this.browserSession = await browserManager.createSession(config.headless, storageState)
+    // attach 模式：壳窗口 + CDP attach 回 Electron 自身（R1'）；登录态活在 partition，不搬运 storageState
+    this.browserSession =
+      mode === 'attach'
+        ? await browserManager.createAttachedSession(this.account.id)
+        : await browserManager.createSession(config.headless, storageState)
 
-    await this.ensureAuthenticated(this.browserSession, config.headless)
+    await this.ensureAuthenticated(this.browserSession, config.headless, mode)
 
-    const state = JSON.stringify(await this.browserSession.context.storageState())
+    // launched 才保存 storageState（attach 的 Cookie 由 partition 持久化，PoC 二次免登已实证）
+    if (this.browserSession.kind === 'launched') {
+      const state = JSON.stringify(await this.browserSession.context.storageState())
 
-    // 登录成功之后马上先保存一次登录状态，确保后续发生意外后不用重新登录
-    windowManager.send(IPC_CHANNELS.chrome.saveState, this.account.id, state)
+      // 登录成功之后马上先保存一次登录状态，确保后续发生意外后不用重新登录
+      windowManager.send(IPC_CHANNELS.chrome.saveState, this.account.id, state)
+    }
 
     // 此时可以确保正在中控台页面，获取用户名
     // 获取用户名不应该和连接中控台的行为冲突
@@ -115,8 +126,15 @@ export class AccountSession {
       this.platform.stopLiveStatusWatch()
     }
     this.logger.warn('与中控台断开连接')
-    // 通过程序关闭浏览器（并非多余的操作，因为 MacOS 的 context 关闭时不会关闭浏览器进程）
-    this.browserSession?.browser.close().catch(e => this.logger.error('无法关闭浏览器：', e))
+    // C1 守卫：统一经 teardownSession 按 kind 分派——
+    // launched 结束浏览器进程（MacOS 下 context 关闭不杀进程，必须显式 close）；
+    // attached 仅断 CDP 连接，绝不杀宿主（browser-shell-formalization-plan v3）
+    teardownSession(this.browserSession!).catch(e => this.logger.error('无法结束会话：', e))
+    // attached：关闭自己的壳窗口（窗口层操作，对齐 launched 关浏览器的用户预期；
+    // 只关本会话窗口，不触碰其他 session——所有权守卫见 teardown.test）
+    if (this.browserSession?.kind === 'attached' && this.browserSession.shellWindowId != null) {
+      shellWindowManager.get(this.browserSession.shellWindowId)?.close()
+    }
     // 关闭所有正在进行的任务
     Array.from(this.activeTasks.values()).forEach(task => {
       task.stop()
@@ -126,11 +144,21 @@ export class AccountSession {
     windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, this.account.id)
   }
 
-  private async ensureAuthenticated(session: BrowserSession, headless = true) {
+  private async ensureAuthenticated(
+    session: BrowserSession,
+    headless = true,
+    mode: ExecMode = 'launch',
+  ) {
     this.browserSession = session
     const isConnected = await this.platform.connect(this.browserSession)
     // 未登录，需要等待登录
     if (!isConnected) {
+      if (mode === 'attach') {
+        // 壳窗口天然有头，直接等待登录；登录态活在 partition，无需 storageState 搬运与模式切换
+        await this.platform.login(this.browserSession)
+        await this.ensureAuthenticated(this.browserSession, headless, mode)
+        return
+      }
       // 无头模式，需要先关闭原先的无头模式，启用有头模式给用户登录
       if (headless) {
         await this.browserSession.browser.close()
@@ -147,7 +175,7 @@ export class AccountSession {
         this.logger.info('登录成功，浏览器将继续以无头模式运行')
         this.browserSession = await browserManager.createSession(headless, storageState)
       }
-      await this.ensureAuthenticated(this.browserSession, headless)
+      await this.ensureAuthenticated(this.browserSession, headless, mode)
     }
   }
 

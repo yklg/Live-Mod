@@ -94,6 +94,7 @@ vi.mock('#/logger', () => {
 vi.mock('#/managers/BrowserSessionManager', () => ({
   browserManager: {
     createSession: async () => ({
+      kind: 'launched',
       page: { on: vi.fn(), close: async () => {} },
       context: { storageState: async () => ({ cookies: [], origins: [] }) },
       browser: {

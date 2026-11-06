@@ -23,6 +23,8 @@ interface ChromeConfig {
   path: string
   storageState: string
   headless: boolean
+  /** 壳模式（R1' attach 驱动）：旧持久化数据无此字段 = undefined = 关闭，无需迁移 */
+  shellMode: boolean
 }
 
 interface ChromeConfigStore {
@@ -30,12 +32,14 @@ interface ChromeConfigStore {
   setPath: (accountId: string, path: string) => void
   setStorageState: (accountId: string, storageState: string) => void
   setHeadless: (accountId: string, headless: boolean) => void
+  setShellMode: (accountId: string, shellMode: boolean) => void
 }
 
 const defaultContext = (): ChromeConfig => ({
   path: '',
   storageState: '',
   headless: false,
+  shellMode: false,
 })
 
 export const useChromeConfigStore = create<ChromeConfigStore>()(
@@ -73,6 +77,12 @@ export const useChromeConfigStore = create<ChromeConfigStore>()(
           set(state => {
             const context = ensureContext(state, accountId)
             context.headless = headless
+          })
+        },
+        setShellMode: (accountId, shellMode) => {
+          set(state => {
+            const context = ensureContext(state, accountId)
+            context.shellMode = shellMode
           })
         },
       }
@@ -136,6 +146,7 @@ export function useCurrentChromeConfigActions() {
   const setPath = useChromeConfigStore(state => state.setPath)
   const setStorageState = useChromeConfigStore(state => state.setStorageState)
   const setHeadless = useChromeConfigStore(state => state.setHeadless)
+  const setShellMode = useChromeConfigStore(state => state.setShellMode)
   const currentAccountId = useAccounts(state => state.currentAccountId)
 
   return useMemo(
@@ -143,7 +154,8 @@ export function useCurrentChromeConfigActions() {
       setPath: (path: string) => setPath(currentAccountId, path),
       setStorageState: (storageState: string) => setStorageState(currentAccountId, storageState),
       setHeadless: (headless: boolean) => setHeadless(currentAccountId, headless),
+      setShellMode: (shellMode: boolean) => setShellMode(currentAccountId, shellMode),
     }),
-    [currentAccountId, setPath, setStorageState, setHeadless],
+    [currentAccountId, setPath, setStorageState, setHeadless, setShellMode],
   )
 }

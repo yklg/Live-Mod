@@ -10,6 +10,8 @@ export interface IpcChannels {
     storageState?: string
     platform: LiveControlPlatform
     account: Account
+    /** 壳模式显式覆盖（A3 裁决链最高优先级）；缺省时由运行时降级/静态矩阵裁决 */
+    mode?: 'launch' | 'attach'
   }) => boolean
   [IPC_CHANNELS.tasks.liveControl.disconnect]: (accountId: string) => boolean
   [IPC_CHANNELS.tasks.liveControl.disconnectedEvent]: (id: string) => void

@@ -76,6 +76,7 @@ const StatusCard = React.memo(() => {
           <StatusAlert />
           <Separator />
           <HeadlessSetting />
+          <ShellModeSetting />
         </div>
       </CardContent>
     </Card>
@@ -88,6 +89,7 @@ const ConnectToLiveControl = React.memo(() => {
   const isConnected = useCurrentLiveControl(context => context.isConnected)
   const chromePath = useCurrentChromeConfig(context => context.path)
   const storageState = useCurrentChromeConfig(context => context.storageState)
+  const shellMode = useCurrentChromeConfig(context => context.shellMode ?? false)
   let headless = useCurrentChromeConfig(context => context.headless)
   const account = useAccounts(store => store.getCurrentAccount())
 
@@ -110,6 +112,8 @@ const ConnectToLiveControl = React.memo(() => {
         storageState,
         platform,
         account,
+        // 壳模式：attach 驱动 Electron 自身壳窗口（R1'）；关闭时缺省交由主进程矩阵裁决
+        ...(shellMode ? { mode: 'attach' as const } : {}),
       })
 
       if (result) {
@@ -228,6 +232,27 @@ const HeadlessSetting = () => {
         checked={headless && platform !== 'taobao'}
         disabled={platform === 'taobao' || isConnected !== 'disconnected'}
         onCheckedChange={v => setHeadless(v)}
+      />
+    </div>
+  )
+}
+
+const ShellModeSetting = () => {
+  const shellMode = useCurrentChromeConfig(context => context.shellMode ?? false)
+  const isConnected = useCurrentLiveControl(context => context.isConnected)
+  const { setShellMode } = useCurrentChromeConfigActions()
+  return (
+    <div className="flex justify-between items-center">
+      <div>
+        <div className="text-sm">壳模式（实验）</div>
+        <div className="text-muted-foreground text-xs">
+          在应用内壳窗口中打开中控台并由其驱动，无需独立浏览器；若平台异常将自动回退经典模式
+        </div>
+      </div>
+      <Switch
+        checked={shellMode}
+        disabled={isConnected !== 'disconnected'}
+        onCheckedChange={v => setShellMode(v)}
       />
     </div>
   )
