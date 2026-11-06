@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { BrowserWindow } from 'electron'
 import { createLogger } from '#/logger'
+import { classifyPopup } from './popupPolicy'
 import { isShellUIEnabled, openPageView } from './shellUI'
 import { chromeUa } from './ua'
 
@@ -50,22 +51,24 @@ class ShellWindowManager {
 
     win.webContents.setUserAgent(chromeUa())
 
-    // 弹窗流规则（与 shellUI 一致，15:04 实测 fxg 登录页存在"自复制逃逸"反嵌入模式）：
-    // 同 host+pathname 自复制弹窗 = framebuster → deny；异 URL 业务弹窗 = 适配器契约 → allow
+    // 弹窗流规则（popupPolicy window 档）：同 host+path 自复制逃逸 = framebuster → deny；
+    // 其余业务/外链弹窗 → allow（Phase 1 launched 语义行为锚，适配器 waitForEvent('page') 契约）。
+    // A3：本档与 shellUI 的 view 档策略不同是平台约束驱动——view 上 allow 会销毁 webContents
+    // （三轮实测），BrowserWindow 无此问题。Phase 3 末裁决"窗口模式退役"前禁止两档"统一化"误改。
     win.webContents.setWindowOpenHandler(({ url }) => {
-      const cur = new URL(win.webContents.getURL())
-      let dup = false
-      try {
-        const pop = new URL(url)
-        dup = cur.host === pop.host && cur.pathname === pop.pathname
-      } catch {
-        dup = false
-      }
-      if (dup) {
-        logger.info('拒绝自复制弹窗（反嵌入逃逸模式），页面留在壳内：', url.slice(0, 80))
+      const decision = classifyPopup({
+        currentUrl: win.webContents.getURL(),
+        popupUrl: url,
+        carrier: 'window',
+      })
+      if (decision === 'deny-selfdup') {
+        logger.info(
+          'popup-rule=deny-selfdup 拒绝自复制弹窗（反嵌入逃逸模式），页面留在壳内：',
+          url.slice(0, 80),
+        )
         return { action: 'deny' }
       }
-      logger.info('弹窗流→子窗口（保持 launched 语义）：', url)
+      logger.info('popup-rule=allow(launched) 弹窗流→子窗口（保持 launched 语义）：', url)
       return { action: 'allow' }
     })
     // 子窗口 UA 对齐（window.open 子窗口默认带 Electron UA，会破坏风控基线）
