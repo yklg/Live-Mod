@@ -8,6 +8,10 @@ import { initTheme } from '@/hooks/useTheme'
 import { autoCleanupStorage } from '@/utils/storage'
 import { ShellRailRoot } from './ShellRail'
 
+// 面板树根容器（计划 v3 C9）：仅 rail 渲染进程声明 @container/panel；
+// 经典入口（index.html）永不添加 —— 容器查询变体在经典树结构性不生效（D6 零变化）。
+document.body.classList.add('@container/panel')
+
 autoCleanupStorage()
 initTheme()
 

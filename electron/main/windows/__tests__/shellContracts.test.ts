@@ -187,3 +187,82 @@ describe('入口隔离（TC-E1/E2 · A1 多入口物理预防）', () => {
     expect(all).toContain('useGlobalIpcListener')
   })
 })
+
+describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
+  it('TC-CQ1 [容器根] rail.html 声明 @container/panel + 高度保障 + 仅面板入口', () => {
+    const railHtml = readIfExists('rail.html') ?? ''
+    expect(railHtml, 'rail.html 必须有面板容器类').toContain('@container/panel')
+    expect(railHtml, 'body 需标记 data-shell-panel（调试/选择器契约）').toContain(
+      'data-shell-panel',
+    )
+    expect(railHtml, '容器根需 height:100% 保障 fixed/Portal 包含块=视口').toContain('height: 100%')
+  })
+
+  it('TC-CQ2 [只加不删] 共享组件保留既有视口类，同时新增 @xl/panel 容器变体', () => {
+    const ledger: Array<[string, string[]]> = [
+      ['src/components/ui/card.tsx', ['p-6', '@xl/panel:p-4', 'text-sm', '@xl/panel:text-xs']],
+      [
+        'src/components/common/Page.tsx',
+        ['px-6 pb-4 pt-5', '@xl/panel:px-4', 'text-xl', '@xl/panel:text-base'],
+      ],
+      ['src/components/ui/input.tsx', ['md:text-sm', '@xl/panel:text-sm']],
+      ['src/components/ui/textarea.tsx', ['md:text-sm', '@xl/panel:text-sm']],
+      [
+        'src/components/ui/dialog.tsx',
+        ['sm:max-w-lg', '@xl/panel:max-w-lg', 'sm:flex-row', '@xl/panel:flex-row'],
+      ],
+      ['src/components/ui/alert-dialog.tsx', ['sm:text-left', '@xl/panel:text-left']],
+      [
+        'src/components/common/SettingsLayout.tsx',
+        ['grid-cols-[172px_1fr]', '@xl/panel:grid-cols-[148px_1fr]'],
+      ],
+      ['src/components/ai-chat/APIKeyDialog.tsx', ['sm:max-w-[425px]', '@xl/panel:max-w-[425px]']],
+    ]
+    for (const [rel, needles] of ledger) {
+      const src = readIfExists(rel)
+      expect(src, `${rel} 必须存在`).not.toBeNull()
+      for (const needle of needles) {
+        expect(src, `${rel} 缺少「${needle}」——只加不删契约被破坏`).toContain(needle)
+      }
+    }
+  })
+
+  it('TC-CQ3 [两列] AutoMessage/AutoPopUp 同时保留 xl: 与 @xl/panel: 网格变体', () => {
+    for (const rel of ['src/pages/AutoMessage/index.tsx', 'src/pages/AutoPopUp/index.tsx']) {
+      const src = readIfExists(rel) ?? ''
+      expect(src).toContain('xl:grid-cols-[2fr_1fr]')
+      expect(src).toContain('@xl/panel:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]')
+    }
+  })
+
+  it('TC-CQ4 [路由清单] ShellRail 路由 = 计划 §3 的 8 条（含自动回复设置）', () => {
+    const src = readIfExists('src/shell/ShellRail.tsx') ?? ''
+    const routes = [...src.matchAll(/<Route path="([^"]+)"/g)].map(m => m[1]).sort()
+    expect(routes).toEqual(
+      [
+        '/',
+        '/ai-chat',
+        '/auto-message',
+        '/auto-popup',
+        '/auto-reply',
+        '/auto-reply/settings',
+        '/red-packet',
+        '/settings',
+      ].sort(),
+    )
+  })
+
+  it('TC-CQ6 [最小窗/死分支] app.ts minWidth=1024 且 > DEGRADE_W（面板降级分支常规不可达）', () => {
+    const app = readIfExists('electron/main/app.ts') ?? ''
+    expect(app).toContain('minWidth: 1024')
+    const layout = readIfExists('electron/main/windows/shellLayout.ts') ?? ''
+    expect(layout).toContain('export const DEGRADE_W = PANEL_W + RAIL_W')
+  })
+
+  it('TC-CQ5 [经典隔离] 经典入口不声明面板容器（容器变体结构性不生效）', () => {
+    const indexHtml = readIfExists('index.html') ?? ''
+    const app = readIfExists('src/App.tsx') ?? ''
+    expect(indexHtml).not.toContain('@container/panel')
+    expect(app).not.toContain('@container/panel')
+  })
+})

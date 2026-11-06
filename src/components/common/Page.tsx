@@ -25,8 +25,17 @@ export function PageHeader({ title, description, actions, back }: PageHeaderProp
           </button>
         )}
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-          {description && <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>}
+          <h1
+            data-testid="page-title"
+            className="text-xl font-semibold tracking-tight @xl/panel:text-base"
+          >
+            {title}
+          </h1>
+          {description && (
+            <p className="mt-1 text-[13px] text-muted-foreground @xl/panel:text-xs">
+              {description}
+            </p>
+          )}
         </div>
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -59,14 +68,22 @@ export function Page({
 }: PageProps) {
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      <div className="shrink-0 px-6 pb-4 pt-5">
+      <div className="shrink-0 px-6 pb-4 pt-5 @xl/panel:px-4 @xl/panel:pb-3 @xl/panel:pt-4">
         <PageHeader title={title} description={description} actions={actions} back={back} />
       </div>
       {full ? (
         <div className="min-h-0 flex-1">{children}</div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-          <div className={cn('mx-auto w-full px-6 pb-8', narrow ? 'max-w-2xl' : 'max-w-5xl')}>
+        <div
+          data-testid="page-scroll"
+          className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
+        >
+          <div
+            className={cn(
+              'mx-auto w-full px-6 pb-8 @xl/panel:px-4 @xl/panel:pb-6',
+              narrow ? 'max-w-2xl' : 'max-w-5xl',
+            )}
+          >
             {children}
           </div>
         </div>

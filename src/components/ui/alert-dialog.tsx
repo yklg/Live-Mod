@@ -44,7 +44,13 @@ AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
 
 function AlertDialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('flex flex-col space-y-2 text-center sm:text-left', className)} {...props} />
+    <div
+      className={cn(
+        'flex flex-col space-y-2 text-center sm:text-left @xl/panel:text-left',
+        className,
+      )}
+      {...props}
+    />
   )
 }
 AlertDialogHeader.displayName = 'AlertDialogHeader'
@@ -52,7 +58,10 @@ AlertDialogHeader.displayName = 'AlertDialogHeader'
 function AlertDialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2', className)}
+      className={cn(
+        'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 @xl/panel:flex-row @xl/panel:justify-end',
+        className,
+      )}
       {...props}
     />
   )
@@ -101,7 +110,7 @@ const AlertDialogCancel = ({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) => (
   <AlertDialogPrimitive.Cancel
     data-slot="alert-dialog-cancel"
-    className={cn(buttonVariants({ variant: 'outline' }), 'mt-2 sm:mt-0', className)}
+    className={cn(buttonVariants({ variant: 'outline' }), 'mt-2 sm:mt-0 @xl/panel:mt-0', className)}
     {...props}
   />
 )

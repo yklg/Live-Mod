@@ -1,15 +1,18 @@
 import { useMemoizedFn } from 'ahooks'
-import { CheckIcon, CircleAlert, GlobeIcon, XIcon } from 'lucide-react'
+import { ArrowLeftRight, CheckIcon, ChevronDown, CircleAlert, GlobeIcon, XIcon } from 'lucide-react'
 import React, { useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
 import { useConnectToLiveControl, useShellUiStatus } from '@/hooks/useConnectToLiveControl'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
+import { isShellPanelView } from '@/shell/lib/panelMode'
 import PlatformSelect from './PlatformSelect'
 
 const StatusAlert = React.memo(() => {
@@ -58,14 +61,14 @@ const StatusAlert = React.memo(() => {
 
 const StatusCard = React.memo(() => {
   return (
-    <Card>
+    <Card data-testid="status-card">
       <CardHeader>
         <CardTitle>控制台状态</CardTitle>
         <CardDescription>查看并管理直播控制台的连接状态</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between @xl/panel:flex-wrap @xl/panel:gap-2">
             <ConnectState />
             <div className="flex items-center gap-2">
               <PlatformSelect />
@@ -75,11 +78,38 @@ const StatusCard = React.memo(() => {
           </div>
           <StatusAlert />
           <Separator />
-          <HeadlessSetting />
-          <ShellModeSetting />
+          <AdvancedSettings />
         </div>
       </CardContent>
     </Card>
+  )
+})
+
+const AdvancedSettings = React.memo(() => {
+  // 壳面板：低频设置收进「高级设置」折叠（C4）；经典模式保持两行常驻（D6 零变化）
+  if (isShellPanelView()) {
+    return (
+      <Collapsible data-testid="advanced-fold">
+        <CollapsibleTrigger className="group/adv flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            高级
+          </span>
+          <span className="text-[13px] font-medium">高级设置</span>
+          <span className="text-xs text-muted-foreground">无头模式 · 强制外部浏览器</span>
+          <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-data-[state=open]/adv:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 space-y-3 rounded-lg border px-3 py-3">
+          <HeadlessSetting />
+          <ShellModeSetting />
+        </CollapsibleContent>
+      </Collapsible>
+    )
+  }
+  return (
+    <>
+      <HeadlessSetting />
+      <ShellModeSetting />
+    </>
   )
 })
 
@@ -96,18 +126,27 @@ const PlatformSwitchButton = React.memo(() => {
   }
 
   const disabled = isConnected !== 'disconnected'
+  const label = disabled ? '请先断开连接' : '切换平台'
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={disabled}
-      title={disabled ? '请先断开连接' : '重新选择要连接的平台'}
-      onClick={() => {
-        void window.ipcRenderer.invoke(IPC_CHANNELS.shell.entryReopen)
-      }}
-    >
-      切换平台
-    </Button>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            data-testid="platform-switch"
+            aria-label={label}
+            disabled={disabled}
+            onClick={() => {
+              void window.ipcRenderer.invoke(IPC_CHANNELS.shell.entryReopen)
+            }}
+          >
+            <ArrowLeftRight className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 })
 

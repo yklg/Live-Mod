@@ -11,6 +11,7 @@ function Card({
   return (
     <div
       ref={ref}
+      data-slot="card"
       className={cn('rounded-xl border bg-card text-card-foreground shadow-sm', className)}
       {...props}
     />
@@ -25,7 +26,14 @@ function CardHeader({
 }: React.HTMLAttributes<HTMLDivElement> & {
   ref?: React.RefObject<HTMLDivElement>
 }) {
-  return <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />
+  return (
+    <div
+      ref={ref}
+      data-slot="card-header"
+      className={cn('flex flex-col space-y-1.5 p-6 @xl/panel:p-4', className)}
+      {...props}
+    />
+  )
 }
 CardHeader.displayName = 'CardHeader'
 
@@ -39,7 +47,7 @@ function CardTitle({
   return (
     <div
       ref={ref}
-      className={cn('font-semibold leading-none tracking-tight', className)}
+      className={cn('font-semibold leading-none tracking-tight @xl/panel:text-sm', className)}
       {...props}
     />
   )
@@ -53,7 +61,13 @@ function CardDescription({
 }: React.HTMLAttributes<HTMLDivElement> & {
   ref?: React.RefObject<HTMLDivElement>
 }) {
-  return <div ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />
+  return (
+    <div
+      ref={ref}
+      className={cn('text-sm text-muted-foreground @xl/panel:text-xs', className)}
+      {...props}
+    />
+  )
 }
 CardDescription.displayName = 'CardDescription'
 
@@ -64,7 +78,14 @@ function CardContent({
 }: React.HTMLAttributes<HTMLDivElement> & {
   ref?: React.RefObject<HTMLDivElement>
 }) {
-  return <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />
+  return (
+    <div
+      ref={ref}
+      data-slot="card-content"
+      className={cn('p-6 pt-0 @xl/panel:p-4 @xl/panel:pt-0', className)}
+      {...props}
+    />
+  )
 }
 CardContent.displayName = 'CardContent'
 
@@ -75,7 +96,13 @@ function CardFooter({
 }: React.HTMLAttributes<HTMLDivElement> & {
   ref?: React.RefObject<HTMLDivElement>
 }) {
-  return <div ref={ref} className={cn('flex items-center p-6 pt-0', className)} {...props} />
+  return (
+    <div
+      ref={ref}
+      className={cn('flex items-center p-6 pt-0 @xl/panel:p-4 @xl/panel:pt-0', className)}
+      {...props}
+    />
+  )
 }
 CardFooter.displayName = 'CardFooter'
 

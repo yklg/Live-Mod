@@ -33,12 +33,12 @@ export function MessageOneKey() {
     <Card>
       <CardContent className="pt-6">
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between @xl/panel:flex-wrap @xl/panel:gap-2">
             <div className="space-y-1">
               <Label>一键刷屏</Label>
               <p className="text-sm text-muted-foreground">连续发送多条评论</p>
             </div>
-            <div className="flex gap-4 justify-end">
+            <div className="flex gap-4 justify-end @xl/panel:flex-wrap">
               <Input
                 placeholder="刷屏条数"
                 type="number"

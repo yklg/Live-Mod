@@ -34,7 +34,13 @@ export function SettingsLayout({
   }
 
   return (
-    <div className={cn('grid grid-cols-[172px_1fr] items-start gap-6', className)}>
+    <div
+      data-testid="settings-layout"
+      className={cn(
+        'grid grid-cols-[172px_1fr] items-start gap-6 @xl/panel:grid-cols-[148px_1fr] @xl/panel:gap-4',
+        className,
+      )}
+    >
       <nav aria-label="设置目录" className="sticky top-0 flex flex-col gap-1">
         {sections.map(section => (
           <a
