@@ -18,10 +18,15 @@ export interface ShellBounds {
 
 export const CHROME_H = 120 // 40 Tab 行 + 44 工具行 + 36 快捷条
 export const RAIL_W = 56 // 收起态图标条宽
-export const PANEL_W = 800 // 768 md 断点 + 滚动条/边框余量（v3 定档教训，禁改回 768）
+// 面板宽度 = 纯产品参数（遮挡面积），**布局不依赖该值**：面板树用容器查询 @xl/panel 适配，
+// 因此 600/800 均可；旧 800 曾用于补偿 CSS md(768) 断点（视口=面板宽度），容器化后不再需要。
+export const PANEL_W = 600
 export const PAGE_MIN = 640 // A0 门禁实证官方页可用宽度
-export const DEGRADE_W = PANEL_W + RAIL_W // 856：窄于此宽面板降级全宽覆盖
-export const MIN_WIN_WIDTH = PAGE_MIN + RAIL_W // 696：官方页 ≥640 的窗口宽下限
+// 降级阈值：winW 低于 panel+rail 时面板全宽覆盖。注意：当前主窗口 minWidth=1024（app.ts），
+// 656/原 856 均低于 1024 → 该分支在常规窗口下不可达（保留以覆盖未来最小宽调整；测试锁定关系）。
+export const DEGRADE_W = PANEL_W + RAIL_W
+// 历史阈值（未接入运行时；实际窗口下限由 app.ts minWidth=1024 控制），仅保留纯函数性质测试。
+export const MIN_WIN_WIDTH = PAGE_MIN + RAIL_W
 
 export interface ShellLayoutInput {
   winW: number

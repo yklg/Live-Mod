@@ -90,24 +90,25 @@ describe('panelController 配对契约与降级（TC-P2~P3）', () => {
     }
   })
 
-  it('TC-P3 [窄窗降级无漂移] winW=800 连续 toggle 两次：全宽↔收起状态一致', () => {
-    const f = setup({ winW: 800 })
+  it('TC-P3 [窄窗降级无漂移] winW=640（<DEGRADE_W 656）连续 toggle 两次：全宽↔收起状态一致', () => {
+    const f = setup({ winW: 640 })
     f.ctrl.toggle('popup')
-    expect(f.applied.at(-1)?.rail).toMatchObject({ x: 0, width: 800 }) // 全宽覆盖档
+    expect(f.applied.at(-1)?.rail).toMatchObject({ x: 0, width: 640 }) // 全宽覆盖档
     f.ctrl.toggle('popup')
     expect(f.applied.at(-1)?.rail.width).toBe(RAIL_W)
     f.ctrl.toggle('popup')
-    expect(f.applied.at(-1)?.rail.width).toBe(800)
+    // 窄窗（<DEGRADE_W）重开仍走降级全宽档，不出现 600 溢出
+    expect(f.applied.at(-1)?.rail.width).toBe(640)
     expect(f.pushed.at(-1)?.panelOpen).toBe(true)
   })
 
-  it('TC-P3b [resize 重算] 展开中窗口变窄 → applyBounds 收到降级档，推送态不变', () => {
+  it('TC-P3b [resize 重算] 展开中窗口变窄到 <DEGRADE_W → applyBounds 收到降级档，推送态不变', () => {
     const f = setup({ winW: 1440 })
     f.ctrl.toggle('popup')
     expect(f.applied.at(-1)?.rail.width).toBe(PANEL_W)
-    f.size.w = 800
+    f.size.w = 640
     f.ctrl.resize()
-    expect(f.applied.at(-1)?.rail.width).toBe(800)
+    expect(f.applied.at(-1)?.rail.width).toBe(640)
     expect(f.ctrl.isOpen()).toBe(true)
     expect(f.pushed.at(-1)?.panelOpen).toBe(true)
   })

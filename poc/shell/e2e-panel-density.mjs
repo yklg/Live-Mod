@@ -11,7 +11,7 @@ import { chromium, _electron as electron } from 'playwright'
 const repo = path.resolve(import.meta.dirname, '../..')
 const outDir = path.join(repo, '.screenshots/shell-panel')
 const stamp = Date.now()
-const expectPanelW = Number(process.env.EXPECT_PANEL_W ?? 800)
+const expectPanelW = Number(process.env.EXPECT_PANEL_W ?? 600)
 const results = []
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 

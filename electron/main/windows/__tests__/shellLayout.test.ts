@@ -44,27 +44,27 @@ describe('shellLayout 决策表（TC-L1~L9）', () => {
       },
     ],
     [
-      'L3 恰 856 展开不降级',
-      base({ winW: 856, panelOpen: true }),
+      'L3 恰 DEGRADE_W(656) 展开不降级',
+      base({ winW: DEGRADE_W, panelOpen: true }),
       {
-        rail: { x: 856 - PANEL_W, y: CHROME_H, width: PANEL_W, height: 800 - CHROME_H },
-        page: { x: 0, y: CHROME_H, width: 856 - RAIL_W, height: 800 - CHROME_H },
+        rail: { x: DEGRADE_W - PANEL_W, y: CHROME_H, width: PANEL_W, height: 800 - CHROME_H },
+        page: { x: 0, y: CHROME_H, width: DEGRADE_W - RAIL_W, height: 800 - CHROME_H },
       },
     ],
     [
-      'L4 855 展开降级全宽',
-      base({ winW: 855, panelOpen: true }),
+      'L4 DEGRADE_W-1(655) 展开降级全宽',
+      base({ winW: DEGRADE_W - 1, panelOpen: true }),
       {
-        rail: { x: 0, y: CHROME_H, width: 855, height: 800 - CHROME_H },
-        page: { x: 0, y: CHROME_H, width: 855 - RAIL_W, height: 800 - CHROME_H },
+        rail: { x: 0, y: CHROME_H, width: DEGRADE_W - 1, height: 800 - CHROME_H },
+        page: { x: 0, y: CHROME_H, width: DEGRADE_W - 1 - RAIL_W, height: 800 - CHROME_H },
       },
     ],
     [
-      'L5 855 收起正常',
-      base({ winW: 855 }),
+      'L5 655 收起正常',
+      base({ winW: DEGRADE_W - 1 }),
       {
-        rail: { x: 855 - RAIL_W, y: CHROME_H, width: RAIL_W, height: 800 - CHROME_H },
-        page: { x: 0, y: CHROME_H, width: 855 - RAIL_W, height: 800 - CHROME_H },
+        rail: { x: DEGRADE_W - 1 - RAIL_W, y: CHROME_H, width: RAIL_W, height: 800 - CHROME_H },
+        page: { x: 0, y: CHROME_H, width: DEGRADE_W - 1 - RAIL_W, height: 800 - CHROME_H },
       },
     ],
     [
@@ -76,10 +76,10 @@ describe('shellLayout 决策表（TC-L1~L9）', () => {
       },
     ],
     [
-      'L7 696 展开走降级档（696<856）',
+      'L7 696 展开为 overlay（696 ≥ DEGRADE_W）',
       base({ winW: 696, panelOpen: true }),
       {
-        rail: { x: 0, y: CHROME_H, width: 696, height: 800 - CHROME_H },
+        rail: { x: 696 - PANEL_W, y: CHROME_H, width: PANEL_W, height: 800 - CHROME_H },
         page: { x: 0, y: CHROME_H, width: PAGE_MIN, height: 800 - CHROME_H },
       },
     ],
@@ -103,10 +103,19 @@ describe('shellLayout 决策表（TC-L1~L9）', () => {
     })
   }
 
-  it('TC-L9 [边界值] DEGRADE_W=856：856 不降级 / 855 降级', () => {
+  it('TC-L9 [边界值] DEGRADE_W=656：656 不降级 / 655 降级', () => {
+    expect(PANEL_W).toBe(600)
     expect(DEGRADE_W).toBe(PANEL_W + RAIL_W)
-    expect(computeShellBounds(base({ winW: 856, panelOpen: true })).rail.width).toBe(PANEL_W)
-    expect(computeShellBounds(base({ winW: 855, panelOpen: true })).rail.width).toBe(855)
+    expect(computeShellBounds(base({ winW: DEGRADE_W, panelOpen: true })).rail.width).toBe(PANEL_W)
+    expect(computeShellBounds(base({ winW: DEGRADE_W - 1, panelOpen: true })).rail.width).toBe(
+      DEGRADE_W - 1,
+    )
+  })
+
+  it('TC-L14b [死分支文档化] 实际最小窗 1024 > DEGRADE_W（降级仅在手动缩窗 <1024 的旧窗口模型下可达）', () => {
+    // 与 electron/main/app.ts minWidth 对齐；常量漂移时该断言提醒同步注释/验收口径
+    expect(1024).toBeGreaterThan(DEGRADE_W)
+    expect(computeShellBounds(base({ winW: 1024, panelOpen: true })).rail.width).toBe(PANEL_W)
   })
 })
 
@@ -130,7 +139,7 @@ describe('shellLayout 不变量（TC-L10~L13）', () => {
     expect(open.page).toEqual(closed.page) // overlay 语义：面板不改 page bounds
   })
 
-  it('TC-L12 [INV] winW ≥ MIN_WIN_WIDTH(696) 时 page.width ≥ PAGE_MIN(640)', () => {
+  it('TC-L12 [INV] winW ≥ MIN_WIN_WIDTH(696) 时 page.width ≥ PAGE_MIN(640)（历史阈值，未接入运行时）', () => {
     expect(MIN_WIN_WIDTH).toBe(PAGE_MIN + RAIL_W)
     for (const w of [696, 700, 856, 1000, 1440]) {
       for (const open of [true, false]) {
