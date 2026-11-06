@@ -17,8 +17,12 @@ import { chromeUa } from './ua'
 
 const logger = createLogger('ShellUI')
 
-// 640px 容纳桌面布局侧栏（256 展开）+ 内容 384（seamless-fix v3 · B.1；460 会触发 useIsMobile 降级）
-const PANEL_WIDTH = 640
+// 面板 CSS 宽度必须 ≥768：桌面侧栏容器是 `hidden md:block`（Tailwind CSS 媒体查询，
+// 与 BREAKPOINTS.MOBILE=768 同源），JS 豁免管不到 CSS 断点——640 面板实测侧栏整体 display:none。
+// 800 = 768 断点 + 余量；pageView 保底 640（A0 门禁实证可用宽度）。
+const PANEL_WIDTH = 800
+const PANEL_MIN = 768
+const PAGE_VIEW_MIN = 640
 // fold loadURL 超时定档（Q6）：超时回退纯 deny，禁止半导航悬挂
 const FOLD_TIMEOUT_MS = 8000
 
@@ -69,6 +73,11 @@ export function attachContainer(
   // windowManager 的 main→renderer 推送目标切到 panelView（React 应用现在住在 panelView）
   windowManager.setUITarget(panelView.webContents)
 
+  // 壳模式默认内容区 1440×800 = 面板 800 + 官方页 640（A0 门禁实证可用宽度）；不足则启动时放大一次
+  const [cw, ch] = win.getContentSize()
+  if (cw < PANEL_WIDTH + PAGE_VIEW_MIN)
+    win.setContentSize(PANEL_WIDTH + PAGE_VIEW_MIN, Math.max(ch, 800))
+
   win.on('resize', relayout)
   win.on('move', relayout)
   win.on('enter-full-screen', relayout)
@@ -94,7 +103,8 @@ function relayout() {
 
   // 注：WebContentsView 本身无 isDestroyed()，以 webContents 状态为准
   if (active && !active.webContents.isDestroyed()) {
-    const pw = Math.min(PANEL_WIDTH, Math.floor(w * 0.5))
+    // 面板恒 ≥768（CSS 断点硬下限），pageView 尽量保 640；窗口过窄时优先保面板
+    const pw = Math.max(PANEL_MIN, Math.min(PANEL_WIDTH, w - PAGE_VIEW_MIN))
     active.setBounds({ x: 0, y: 0, width: w - pw, height: h })
     panelView?.setBounds({ x: w - pw, y: 0, width: pw, height: h })
   } else {
