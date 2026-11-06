@@ -46,7 +46,7 @@ export function attachEntryView(
 ) {
   // append 挂载：由 shellUI 控制「entry → chrome → rail」顺序，pageView 再 mount 到 index 0，
   // 最终 [page(0), entry(1), chrome(2), rail(3)]（P0-2 v1）
-  entryView = makeAppView(preloadPath)
+  entryView = makeAppView(preloadPath, 'entry')
   win.contentView.addChildView(entryView)
   entryView.setVisible(false)
   visible = false

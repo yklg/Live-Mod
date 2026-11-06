@@ -103,5 +103,9 @@ export const IPC_CHANNELS = {
     entrySkip: 'shell:entrySkip',
     entryReopen: 'shell:entryReopen',
     railReady: 'shell:railReady',
+    // 壳级通知层（shell-ui-polish v3）：notify=renderer 请求；notice=主进程推送；noticeReady=渲染层就绪
+    notify: 'shell:notify',
+    notice: 'shell:notice',
+    noticeReady: 'shell:noticeReady',
   },
 } as const

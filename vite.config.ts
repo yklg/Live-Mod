@@ -32,6 +32,7 @@ export default defineConfig(({ command }) => {
           chrome: path.join(__dirname, 'chrome.html'),
           rail: path.join(__dirname, 'rail.html'),
           entry: path.join(__dirname, 'entry.html'),
+          notice: path.join(__dirname, 'notice.html'),
         },
       },
     },

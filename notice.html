@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" style="background: transparent">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <title>Live Mod Notice</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <style>
+      html, body { background: transparent !important; overflow: hidden; }
+    </style>
+    <script>
+      // 与 src/hooks/useTheme.ts 共享 'appearance-storage' 的存储格式（{state:{mode},version}）。
+      try {
+        var raw = localStorage.getItem('appearance-storage')
+        var mode = raw ? (JSON.parse(raw).state || {}).mode : 'system'
+        if (
+          mode === 'dark' ||
+          (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ) {
+          document.documentElement.classList.add('dark')
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/shell/notice.tsx"></script>
+  </body>
+</html>

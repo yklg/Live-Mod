@@ -1,5 +1,6 @@
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
 import type { ElectronAPI, IpcChannels } from 'shared/electron-api'
+import { isShellUiView, parseNoticeTestMsArg, parseShellViewArg } from 'shared/shellView'
 
 type IpcRendererInvokeReturnType<Channel extends keyof IpcChannels> =
   ReturnType<IpcChannels[Channel]> extends Promise<infer _U>
@@ -37,3 +38,13 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', ipcRendererApi)
+
+// 壳模式同步判定（shell-ui-polish v3）：在渲染层任何模块执行前注入，替代异步 uiStatus 带来的启动竞态。
+const shellViewName = parseShellViewArg(process.argv)
+contextBridge.exposeInMainWorld('__lmView', {
+  name: shellViewName,
+  shellUi: isShellUiView(shellViewName),
+})
+// 仅测试口径：通知停留时长覆盖（由 viewHost 依据 LM_SHELL_DEBUG + env 注入 argv）
+const noticeTestMs = parseNoticeTestMsArg(process.argv)
+if (noticeTestMs !== null) contextBridge.exposeInMainWorld('__lmNoticeTestMs', noticeTestMs)

@@ -109,6 +109,8 @@ async function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
       preload,
+      // 经典入口视图标识（壳模式同步判定契约：preload 读 --lm-view；经典 = index）
+      additionalArguments: ['--lm-view=index'],
       // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
       // nodeIntegration: true,
       nodeIntegration: process.env.NODE_ENV === 'development',

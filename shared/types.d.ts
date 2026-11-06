@@ -216,3 +216,23 @@ declare type ShellEntryCatalog = {
     autoRestore: boolean
   }
 }
+
+/** 壳入口视图名（viewHost 以 --lm-view=<name> 注入 renderer argv，preload 同步暴露） */
+declare type ShellViewName = 'index' | 'chrome' | 'rail' | 'entry' | 'notice'
+
+/** 通知语义变体（壳级通知层；经典模式不消费） */
+declare type NoticeVariant = 'success' | 'error' | 'warning' | 'info'
+
+/** 壳级通知 payload（renderer -> main / main -> notice 渲染层；字符串可序列化，禁 ReactNode） */
+declare type NoticePayload = {
+  variant: NoticeVariant
+  title?: string
+  description: string
+}
+
+declare interface Window {
+  /** preload 同步注入：当前视图名 + 是否壳 UI（替代异步 uiStatus，消除启动竞态） */
+  __lmView?: { name: ShellViewName; shellUi: boolean }
+  /** 仅测试口径：通知停留时长覆盖（LM_SHELL_NOTICE_TEST_MS，preload 从 argv 读取） */
+  __lmNoticeTestMs?: number
+}

@@ -28,6 +28,13 @@ import { attachEntryView, destroyEntryView, getEntryDebug, relayoutEntryView } f
 import { installExternalProtocolGuard } from './externalProtocolGuard'
 import { foldNavigate } from './foldNavigate'
 import { shouldWarnLeaveControlPage } from './leaveGuard'
+import { getNoticeBusState, resetNoticeBus } from './noticeBus'
+import {
+  attachNoticeWindow,
+  destroyNoticeWindow,
+  getNoticeWindowDebug,
+  getNoticeWindowWebContents,
+} from './noticeWindow'
 import { preventPageInitiatedClose } from './pageCloseGuard'
 import { clampZoom, nextZoom, ZOOM_DEFAULT, ZOOM_STEP, zoomPercent, zoomStoreKey } from './pageZoom'
 import { createPanelController } from './panelController'
@@ -46,6 +53,7 @@ const FOLD_TIMEOUT_MS = 8000
 let container: BrowserWindow | null = null
 let chromeView: WebContentsView | null = null
 let railView: WebContentsView | null = null
+
 let enabled = false
 
 interface RealTabView extends TabView {
@@ -159,13 +167,17 @@ export function attachContainer(
   enabled = true
   container = win
 
-  chromeView = makeAppView(preloadPath)
-  railView = makeAppView(preloadPath)
+  chromeView = makeAppView(preloadPath, 'chrome')
+  railView = makeAppView(preloadPath, 'rail')
   // 层级铁律（P0-2 v1）：按 append 顺序建 [entry, chrome, rail]，再让 pageView mount 到 index 0 →
   // 最终子序 [page(0), entry(1), chrome(2), rail(3)]（依赖 tabManager mount 恒 index 0 的插入语义）。
   attachEntryView(win, entry, preloadPath)
   win.contentView.addChildView(chromeView)
   win.contentView.addChildView(railView)
+  // 壳级通知覆盖层：独立透明子窗口（真点击穿透 + 父子窗口最顶层；视图方案无 setIgnoreMouseEvents——探针结论）
+  attachNoticeWindow(win, entry, preloadPath)
+  const noticeWc = getNoticeWindowWebContents()
+  if (noticeWc) windowManager.setTarget('notice', noticeWc)
   // 壳内任意视图聚焦时 Cmd/Ctrl +/-/0 都作用于当前活跃 Tab（地址栏/入口同样可用）
   for (const wc of [chromeView.webContents, railView.webContents]) installZoomShortcuts(wc)
 
@@ -300,6 +312,8 @@ export function attachContainer(
 
   win.once('closed', () => {
     destroyEntryView()
+    destroyNoticeWindow()
+    resetNoticeBus()
     container = null
     chromeView = null
     railView = null
@@ -429,6 +443,8 @@ function registerShellDebug() {
       activeTabPresent: tabManager.hasActiveTab(),
     })
     const entry = getEntryDebug()
+    const noticeBus = getNoticeBusState()
+    const notice = getNoticeWindowDebug()
     return {
       panelOpen: panel.isOpen(),
       routeId: panel.route(),
@@ -438,6 +454,15 @@ function registerShellDebug() {
       entryUrl: entry.url,
       entryBounds: entry.bounds,
       expectedEntryBounds: computeEntryBounds({ winW: w, winH: h }),
+      noticeUrl: notice.url,
+      noticeVisible: notice.visible,
+      noticeBounds: notice.bounds,
+      expectedNoticeBounds: notice.expectedBounds,
+      noticeBus: {
+        ready: noticeBus.ready,
+        pending: noticeBus.pending.length,
+        dropped: noticeBus.dropped,
+      },
       childrenUrls: container.contentView.children.map(c => {
         const v = c as unknown as WebContentsView
         return v.webContents?.getURL?.() ?? ''

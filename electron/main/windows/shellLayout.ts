@@ -65,7 +65,8 @@ export function computeShellBounds({
 /**
  * 壳入口选择器视图 bounds（shell-entry-platform-selector v1）：
  * 覆盖「页面区」——chrome 下、常驻 rail 图标条左侧。与 page bounds 同形但**不依赖活跃 Tab**
- * （入口出现时页面可能尚未建/已关闭），因此入口几何独立成纯函数，避免布局层出现第四份公式。
+ * （入口出现时页面可能尚未建/已关闭）。notice 通知层为独立透明窗口（需窗口级点击穿透），
+ * 不复用本视图几何——两者定位方式不同，见 windows/noticeWindow.ts。
  */
 export function computeEntryBounds({ winW, winH }: { winW: number; winH: number }): Bounds {
   return { x: 0, y: CHROME_H, width: winW - RAIL_W, height: winH - CHROME_H }

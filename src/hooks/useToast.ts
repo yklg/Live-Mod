@@ -2,8 +2,10 @@
 
 // Inspired by react-hot-toast library
 import * as React from 'react'
+import { IPC_CHANNELS } from 'shared/ipcChannels'
 import type { ToastActionElement, ToastProps } from '@/components/ui/toast'
 import { TOAST } from '@/constants'
+import { shouldRouteToastToNotice } from '@/utils/shellNotice'
 
 type ToasterToast = ToastProps & {
   id: string
@@ -164,17 +166,34 @@ function toast({ ...props }: Toast) {
   }
 }
 
+/** 壳模式：success/error(string) 转发到通知覆盖层（不写本地 store，避免 56px rail 裁剪/双份展示） */
+function routeToastToNotice(variant: 'success' | 'error', message: string): boolean {
+  if (typeof window === 'undefined') return false
+  if (!shouldRouteToastToNotice(window.__lmView)) return false
+  // fire-and-forget：主进程负责校验/缓冲；通知层不可用时不阻塞业务调用
+  void window.ipcRenderer
+    .invoke(IPC_CHANNELS.shell.notify, { variant, description: message })
+    .catch(() => {})
+  return true
+}
+
+const SHELL_NOTICE_STUB = { id: 'shell-notice', dismiss: () => {}, update: () => {} }
+
 const toasty = {
   success: (message: string) =>
-    toast({
-      variant: 'default',
-      description: message,
-    }),
+    routeToastToNotice('success', message)
+      ? SHELL_NOTICE_STUB
+      : toast({
+          variant: 'default',
+          description: message,
+        }),
   error: (message: string) =>
-    toast({
-      variant: 'destructive',
-      description: message,
-    }),
+    routeToastToNotice('error', message)
+      ? SHELL_NOTICE_STUB
+      : toast({
+          variant: 'destructive',
+          description: message,
+        }),
 }
 
 function useToasts() {

@@ -10,6 +10,7 @@ import {
   reopenEntry,
   selectEntry,
 } from '#/windows/entryView'
+import { handleNoticeReady, pushNotice } from '#/windows/noticeBus'
 import { accountTabPartition } from '#/windows/shellTabManager'
 import {
   getContainer,
@@ -52,6 +53,14 @@ function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.railReady, () => {
     if (!isShellUIEnabled()) return
     handleRailReady()
+  })
+
+  // ---- 壳级通知层（shell-ui-polish v3）----
+  // notify：rail 业务树 toast 请求（壳模式）→ 主进程校验/缓冲 → 覆盖层；经典模式不会触达
+  typedIpcMainHandle(IPC_CHANNELS.shell.notify, (_, payload) => ({ ok: pushNotice(payload) }))
+  typedIpcMainHandle(IPC_CHANNELS.shell.noticeReady, () => {
+    if (!isShellUIEnabled()) return
+    handleNoticeReady()
   })
 
   // v3·P1：attach 模式登录态活在账号 Tab partition——重置必须清它（partition 名与 tabManager 同源）

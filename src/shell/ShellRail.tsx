@@ -21,7 +21,6 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { useGlobalIpcListener } from '@/App'
 import { Toaster } from '@/components/ui/toaster'
 import { UpdateDialog } from '@/components/update/UpdateDialog'
-import { useToast } from '@/hooks/useToast'
 import AIChat from '@/pages/AIChat'
 import AutoMessage from '@/pages/AutoMessage'
 import AutoPopUp from '@/pages/AutoPopUp'
@@ -60,7 +59,6 @@ function requestToggle(routeId?: string | null) {
 export function ShellRailRoot() {
   // 完整业务树唯一宿主（TC-E2 反向断言目标）：全局事件监听恰好注册一次
   useGlobalIpcListener()
-  const { toast } = useToast()
   // 初始态由视口宽度推导（bounds 镜像），此后只信主进程推送（A2 单源）
   const [rail, setRail] = useState<ShellRailState>({
     panelOpen: window.innerWidth > RAIL_W,
@@ -70,14 +68,6 @@ export function ShellRailRoot() {
   useEffect(() => {
     return window.ipcRenderer.on(IPC_CHANNELS.shell.railState, s => setRail(s))
   }, [])
-
-  useEffect(
-    () =>
-      window.ipcRenderer.on(IPC_CHANNELS.shell.warnToast, message => {
-        toast.error(message)
-      }),
-    [toast],
-  )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

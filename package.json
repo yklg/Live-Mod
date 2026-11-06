@@ -23,6 +23,7 @@
     "preview": "vite preview",
     "pretest": "node scripts/check-ui-tokens.mjs && vite build --mode=test",
     "test": "vitest run",
+    "test:e2e:shell": "npx vite build && node poc/shell/e2e-shell-parity.mjs && node poc/shell/e2e-entry-selector.mjs && node poc/shell/e2e-shell-login.mjs",
     "prepare": "husky",
     "bump": "bumpp --no-commit --no-tag --no-push && changelogen --output",
     "release": "node ./scripts/release",

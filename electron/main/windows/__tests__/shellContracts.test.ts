@@ -89,7 +89,8 @@ describe('shell IPC 通道契约（TC-P4）', () => {
     walk(shell, '')
     // tab×7 + list/state + window×3 + railToggle/railState + warnToast/uiStatus/resetLoginState(17)
     // + entryCatalog/entrySelect/entryIntent/entrySkip/entryReopen/railReady(6，shell-entry-platform-selector v1)
-    expect(keys.length).toBeGreaterThanOrEqual(23)
+    // + notify/notice/noticeReady(3，shell-ui-polish v3 通知层)
+    expect(keys.length).toBeGreaterThanOrEqual(26)
     const dts = readIfExists('shared/electron-api.d.ts')
     if (!dts) throw new Error('shared/electron-api.d.ts 缺失')
     for (const key of keys) {
@@ -159,6 +160,24 @@ describe('入口隔离（TC-E1/E2 · A1 多入口物理预防）', () => {
     expect(all).not.toContain('showComment')
     // 入口只准用 shell:* 通道（唯一连接通道在 rail，入口禁止直连 connect）
     expect(all).not.toContain('liveControl.connect')
+  })
+
+  it('TC-E4 [notice 最小树] notice 入口模块图不含业务监听/tasks；只消费 shell:* 通道', () => {
+    const graph = collectModuleGraph('src/shell/notice.tsx')
+    if (!graph) throw new Error('src/shell/notice.tsx 及其 import 图必须完整存在')
+    const all = runtimeTexts(graph)
+    expect(all).not.toContain('useGlobalIpcListener')
+    expect(all).not.toContain('IPC_CHANNELS.tasks.')
+    expect(all).not.toContain("from '@/App'")
+    // 通知层只消费 shell:notice / shell:noticeReady（不得直连业务通道）
+    expect(all).toContain('IPC_CHANNELS.shell.notice')
+    expect(all).toContain('IPC_CHANNELS.shell.noticeReady')
+  })
+
+  it('TC-P7 [warnToast 配对] 连接降级同时具备 fork 契约通道与通知层推送（防只改一半）', () => {
+    const conn = readIfExists('electron/main/ipc/connection.ts') ?? ''
+    expect(conn, '必须保留 shell:warnToast（开源 fork 监听契约）').toContain('shell.warnToast')
+    expect(conn, '必须同时推送壳级通知覆盖层').toContain('pushNotice')
   })
 
   it('TC-E2 [rail 完整树·反向断言] rail 入口模块图必须含 useGlobalIpcListener（防两边都没注册）', () => {

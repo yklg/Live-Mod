@@ -39,6 +39,7 @@ function childEnv() {
     ...process.env,
     LM_SHELL_UI: '1',
     LM_SHELL_DEBUG: '1',
+    LM_SHELL_NOTICE_TEST_MS: '300',
     ELECTRON_DISABLE_SANDBOX: '1',
   }
   // 本会话 bash 默认注入 ELECTRON_RUN_AS_NODE=1：会把 Electron 当 Node 跑，必须剔除
@@ -63,7 +64,9 @@ async function launchApp(profileDir = profile) {
       return a.__shellDebug()
     })
   await waitFor(() => debug(), 15_000, 'shellDebug 就绪')
-  const port = readFileSync(path.join(profileDir, 'DevToolsActivePort'), 'utf-8').split('\n')[0].trim()
+  const port = readFileSync(path.join(profileDir, 'DevToolsActivePort'), 'utf-8')
+    .split('\n')[0]
+    .trim()
   const cdp = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
   const pages = () => cdp.contexts().flatMap(c => c.pages())
   const pageBy = async (needle, timeoutMs = 30_000) =>
@@ -113,14 +116,19 @@ async function main() {
       (d.childrenUrls[2] ?? '').includes('chrome.html') &&
       (d.childrenUrls[3] ?? '').includes('rail.html')
     const boundsOk = JSON.stringify(d.entryBounds) === JSON.stringify(d.expectedEntryBounds)
+    const noticeOk =
+      (d.noticeUrl ?? '').includes('notice.html') &&
+      JSON.stringify(d.noticeBounds) === JSON.stringify(d.expectedNoticeBounds)
     record(
       'EC-1 启动即入口 + 层级/几何',
-      orderOk && boundsOk && d.childrenUrls.length >= 4,
-      `entryVisible=${d.entryVisible} bounds=${JSON.stringify(d.entryBounds)} order=${JSON.stringify(d.childrenUrls)}`,
+      orderOk && boundsOk && noticeOk && d.childrenUrls.length >= 4,
+      `entryVisible=${d.entryVisible} bounds=${JSON.stringify(d.entryBounds)} notice=${noticeOk} order=${JSON.stringify(d.childrenUrls)}`,
     )
     // 证据：优先整窗 capturePage；窗口被遮挡/未绘帧时退回逐 view 捕获
     const shots = await ctx.app.evaluate(async ({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0]
+      const win =
+        BrowserWindow.getAllWindows().find(w => w.contentView.children.length > 0) ??
+        BrowserWindow.getAllWindows()[0]
       win.show()
       win.focus()
       await new Promise(r => setTimeout(r, 600))
@@ -199,7 +207,9 @@ async function main() {
   try {
     const sendZoomKey = keyCode =>
       ctx.app.evaluate(({ BrowserWindow }, key) => {
-        const win = BrowserWindow.getAllWindows()[0]
+        const win =
+          BrowserWindow.getAllWindows().find(w => w.contentView.children.length > 0) ??
+          BrowserWindow.getAllWindows()[0]
         const page = win.contentView.children[0]
         page.webContents.sendInputEvent({ type: 'keyDown', keyCode: key, modifiers: ['meta'] })
         page.webContents.sendInputEvent({ type: 'keyUp', keyCode: key, modifiers: ['meta'] })
@@ -233,14 +243,105 @@ async function main() {
     await sleep(1200)
     const log = ctx.mainLog.join('')
     const blocked = /已拦截非 http\(s\) 页面导航/.test(log)
-    const unchanged = httpPage.url() === urlBefore
+    // 深链被拦截后页面仍应是 http(s)（官方页可能同时发生自身跳转，故只断言协议未被外部协议替换）
+    const unchanged = /^https?:/.test(httpPage.url())
     record(
       'EC-7 外部协议深链拦截（bytedance://）',
       blocked && unchanged,
-      `blocked=${blocked} urlUnchanged=${unchanged}`,
+      `blocked=${blocked} stillHttp=${unchanged} before=${urlBefore.slice(0, 40)}`,
     )
   } catch (e) {
     record('EC-7 外部协议深链拦截（bytedance://）', false, String(e.message ?? e))
+  }
+
+  // ---- EC-8 通知覆盖层：置顶/几何/自动消失（测试时长 300ms 由 LM_SHELL_NOTICE_TEST_MS 注入） ----
+  try {
+    await ctx.invoke('shell:notify', { variant: 'error', description: 'E2E 通知置顶探针' })
+    const noticePage = await ctx.pageBy('notice.html', 15_000)
+    const countUp = await waitFor(
+      async () => {
+        const n = await noticePage.evaluate(
+          () => document.querySelectorAll('[data-notice-item]').length,
+        )
+        return n > 0 ? n : null
+      },
+      8_000,
+      '通知出现',
+    )
+    const d = await ctx.debug()
+    const geomOk = JSON.stringify(d.noticeBounds) === JSON.stringify(d.expectedNoticeBounds)
+    const urlOk = (d.noticeUrl ?? '').includes('notice.html')
+    const png = await ctx.app
+      .evaluate(async ({ BrowserWindow }) => {
+        const w = BrowserWindow.getAllWindows().find(x =>
+          x.webContents.getURL().includes('notice.html'),
+        )
+        if (!w) return null
+        return Array.from((await w.webContents.capturePage()).toPNG())
+      })
+      .catch(() => null)
+    if (png) writeFileSync(path.join(outDir, 'notice-topmost.png'), Buffer.from(png))
+    const gone = await waitFor(
+      async () => {
+        const n = await noticePage.evaluate(
+          () => document.querySelectorAll('[data-notice-item]').length,
+        )
+        return n === 0 ? true : null
+      },
+      8_000,
+      '通知自动消失',
+    )
+    record(
+      'EC-8 通知覆盖层（置顶/几何/自动消失）',
+      Boolean(countUp) && geomOk && urlOk && Boolean(gone),
+      `count=${countUp} geom=${geomOk} autoDismiss=${gone} bounds=${JSON.stringify(d.noticeBounds)}`,
+    )
+  } catch (e) {
+    record('EC-8 通知覆盖层（置顶/几何/自动消失）', false, String(e.message ?? e))
+  }
+
+  // ---- EC-10 空态 a11y：aria-live 常驻（即使 0 条通知）----
+  try {
+    const noticePage = await ctx.pageBy('notice.html')
+    const live = await noticePage.evaluate(() =>
+      Boolean(document.querySelector('[role="status"][aria-live="polite"]')),
+    )
+    record('EC-10 空态 aria-live 常驻', live, `liveRegion=${live}`)
+  } catch (e) {
+    record('EC-10 空态 aria-live 常驻', false, String(e.message ?? e))
+  }
+
+  // ---- EC-8b 面板展开时通知仍最顶（D4 决策固化），且壳内层级不变量不变 ----
+  try {
+    await ctx.invoke('shell:railToggle', 'popup')
+    await sleep(500)
+    await ctx.invoke('shell:notify', { variant: 'warning', description: '面板展开时通知探针' })
+    const noticePage = await ctx.pageBy('notice.html')
+    await waitFor(
+      async () => {
+        const n = await noticePage.evaluate(
+          () => document.querySelectorAll('[data-notice-item]').length,
+        )
+        return n > 0 ? n : null
+      },
+      8_000,
+      '面板展开时通知出现',
+    )
+    const d = await ctx.debug()
+    const urls = d.childrenUrls
+    const entryIdx = urls.findIndex(u => u.includes('entry.html'))
+    const chromeIdx = urls.findIndex(u => u.includes('chrome.html'))
+    const railIdx = urls.findIndex(u => u.includes('rail.html'))
+    const orderOk = entryIdx >= 1 && chromeIdx === entryIdx + 1 && railIdx === chromeIdx + 1 // 页面区(≥1 pageView) < entry < chrome < rail
+    const geomOk = JSON.stringify(d.noticeBounds) === JSON.stringify(d.expectedNoticeBounds)
+    record(
+      'EC-8b 面板展开时通知仍置顶',
+      orderOk && geomOk,
+      `panelOpen=${d.panelOpen} order=${JSON.stringify(d.childrenUrls)} boundsOk=${geomOk}`,
+    )
+    await ctx.invoke('shell:railToggle', 'popup') // 收起面板
+  } catch (e) {
+    record('EC-8b 面板展开时通知仍置顶', false, String(e.message ?? e))
   }
 
   // ---- EC-3 记住选择：重启同 profile → 跳过入口 + 自动恢复（直接进登录页/中控台） ----

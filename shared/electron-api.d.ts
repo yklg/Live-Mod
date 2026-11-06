@@ -169,6 +169,10 @@ export interface IpcChannels {
   [IPC_CHANNELS.shell.entrySkip]: () => void
   [IPC_CHANNELS.shell.entryReopen]: () => void
   [IPC_CHANNELS.shell.railReady]: () => void
+  // 壳级通知层（shell-ui-polish v3）：renderer 请求 → 主进程校验/缓冲 → 覆盖层渲染
+  [IPC_CHANNELS.shell.notify]: (payload: NoticePayload) => { ok: boolean }
+  [IPC_CHANNELS.shell.notice]: (payload: NoticePayload) => void
+  [IPC_CHANNELS.shell.noticeReady]: () => void
 }
 
 export interface ShellTabInfo {

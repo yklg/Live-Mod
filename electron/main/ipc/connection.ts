@@ -7,6 +7,7 @@ import { runtimeEnvState } from '#/platforms/runtimeEnvState'
 import { typedIpcMainHandle } from '#/utils'
 import windowManager from '#/windowManager'
 import { hideEntry } from '#/windows/entryView'
+import { pushNotice } from '#/windows/noticeBus'
 import { isShellUIEnabled } from '#/windows/shellUI'
 
 const TASK_NAME = '中控台'
@@ -44,11 +45,13 @@ function setupIpcHandlers() {
             )
             runtimeEnvState.degrade(platform)
             // v3·决策3：降级不静默——rail 明示（经典模式无监听静默丢弃属预期，见计划 Assumptions）
+            // 双发：warnToast 保留开源 fork 监听契约；pushNotice 走壳级通知覆盖层（本仓 UI 实际消费）
             windowManager.sendTo(
               'ui',
               IPC_CHANNELS.shell.warnToast,
               '壳内连接失败，已回退外部浏览器登录',
             )
+            pushNotice({ variant: 'error', description: '壳内连接失败，已回退外部浏览器登录' })
             await accountSession.connect({ headless, storageState, mode: 'launch' })
           } else {
             throw error

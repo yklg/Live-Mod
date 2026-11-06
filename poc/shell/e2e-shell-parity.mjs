@@ -94,12 +94,29 @@ async function main() {
     record('TC-G2', false, String(e.message ?? e))
   }
 
+  // ---- TC-G2b 通知覆盖层为独立透明子窗口（不在 contentView 子序内；由父窗口跟随定位）----
+  try {
+    const d = await debug()
+    const urlOk = (d.noticeUrl ?? '').includes('notice.html')
+    const geomOk = JSON.stringify(d.noticeBounds) === JSON.stringify(d.expectedNoticeBounds)
+    record(
+      'TC-G2b',
+      urlOk && geomOk,
+      `noticeUrl=${(d.noticeUrl ?? '').slice(-28)} bounds=${JSON.stringify(d.noticeBounds)}`,
+    )
+  } catch (e) {
+    record('TC-G2b', false, String(e.message ?? e))
+  }
+
   // ---- TC-G3 三 view 截图基线（人工对照 .screenshots/shell-parity/ 与光圈截图）----
   try {
     const outDir = path.resolve(import.meta.dirname, '../../.screenshots/shell-parity')
     mkdirSync(outDir, { recursive: true })
     const pngs = await app.evaluate(({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0]
+      // 通知覆盖层是独立子窗口：必须选「带 contentView 子视图的容器窗口」，避免抓到 notice 窗口（children=[]）
+      const win =
+        BrowserWindow.getAllWindows().find(w => w.contentView.children.length > 0) ??
+        BrowserWindow.getAllWindows()[0]
       return Promise.all(
         win.contentView.children.map(async c => ({
           url: c.webContents.getURL(),
