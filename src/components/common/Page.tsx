@@ -12,7 +12,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions, back }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex items-start justify-between gap-4 @xl/panel:flex-col @xl/panel:items-stretch @xl/panel:gap-2">
       <div className="flex min-w-0 items-start gap-2.5">
         {back && (
           <button
@@ -38,7 +38,14 @@ export function PageHeader({ title, description, actions, back }: PageHeaderProp
           )}
         </div>
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && (
+        <div
+          data-testid="page-actions"
+          className="flex shrink-0 items-center gap-2 @xl/panel:w-full @xl/panel:flex-wrap @xl/panel:justify-start"
+        >
+          {actions}
+        </div>
+      )}
     </div>
   )
 }

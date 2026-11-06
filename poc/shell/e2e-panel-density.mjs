@@ -220,12 +220,14 @@ async function main() {
               .map(v => Number.parseFloat(v))
             return { tracks, rectWidth: g.getBoundingClientRect().width }
           })
+          // C5 回退（实测）：600 面板内两列内容不足（弹窗设置卡溢出/开关压字）→ 面板内单列
           record(
-            `M3 路由「${r.title}」面板两列 ≥220`,
-            Boolean(cols) && cols.tracks.length === 2 && cols.tracks.every(w => w >= 220),
+            `M3 路由「${r.title}」面板内单列回退（600 宽内容不足）`,
+            Boolean(cols) && cols.tracks.length === 1,
             JSON.stringify(cols),
           )
         }
+        if (r.id === 'popup') await ctx.captureContainer('panel-density-popup.png')
         if (r.id === 'set') {
           const layout = await railEval(rail, () => {
             const el = document.querySelector('[data-testid="settings-layout"]')
@@ -246,9 +248,59 @@ async function main() {
       }
     }
 
-    // ---- M6 面板内弹窗居中（Portal/fixed 包含块）----
+    // ---- M11 面板页头分层（600 宽标题不被操作区压成竖排）----
     try {
       await ctx.invoke('shell:railToggle', 'ai')
+      await waitFor(
+        async () => {
+          const t = await railEval(rail, () =>
+            document.querySelector('[data-testid="page-title"]')?.textContent?.trim(),
+          )
+          return t === 'AI 助手' ? t : null
+        },
+        20_000,
+        'AI 助手页',
+      )
+      await sleep(400)
+      const title = await waitFor(
+        () =>
+          railEval(rail, () => {
+            const t = document.querySelector('[data-testid="page-title"]')
+            const a = document.querySelector('[data-testid="page-actions"]')
+            if (!t) return null
+            const tr = t.getBoundingClientRect()
+            const ar = a ? a.getBoundingClientRect() : null
+            return {
+              title: t.textContent?.trim(),
+              titleW: tr.width,
+              titleH: tr.height,
+              actionsTop: ar?.top ?? null,
+              actionsW: ar?.width ?? null,
+              titleTop: tr.top,
+            }
+          }),
+        5000,
+        'AI 助手页头',
+      )
+      record(
+        'M11 AI 助手页头分层（标题横向/操作区换行不挤压）',
+        Boolean(title) &&
+          (title.titleW ?? 0) >= 100 &&
+          (title.titleH ?? 0) <= 40 &&
+          title.actionsTop !== null &&
+          title.actionsTop >= title.titleTop &&
+          (title.actionsW ?? 0) > 0,
+        JSON.stringify(title),
+      )
+      await ctx.captureContainer('panel-density-ai.png')
+    } catch (e) {
+      record('M11 AI 助手页头分层（标题横向/操作区换行不挤压）', false, String(e.message ?? e))
+    }
+
+    // ---- M6 面板内弹窗居中（Portal/fixed 包含块）----
+    try {
+      const d0 = await ctx.debug()
+      if (!d0.panelOpen || d0.routeId !== 'ai') await ctx.invoke('shell:railToggle', 'ai')
       await waitFor(
         async () => {
           const t = await railEval(rail, () =>

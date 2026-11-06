@@ -45,10 +45,7 @@ export default function AutoMessage() {
         </Alert>
       )}
 
-      <div
-        className="grid gap-5 xl:grid-cols-[2fr_1fr] xl:items-start @xl/panel:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-        data-testid="auto-grid"
-      >
+      <div className="grid gap-5 xl:grid-cols-[2fr_1fr] xl:items-start" data-testid="auto-grid">
         <MessageListCard />
         <div className="grid gap-5">
           <MessageSettingsCard />

@@ -227,11 +227,13 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     }
   })
 
-  it('TC-CQ3 [两列] AutoMessage/AutoPopUp 同时保留 xl: 与 @xl/panel: 网格变体', () => {
+  it('TC-CQ3 [C5 回退] Auto 页保留经典两列；600 面板内容不足 → 不使用面板两列变体（单列）', () => {
     for (const rel of ['src/pages/AutoMessage/index.tsx', 'src/pages/AutoPopUp/index.tsx']) {
       const src = readIfExists(rel) ?? ''
-      expect(src).toContain('xl:grid-cols-[2fr_1fr]')
-      expect(src).toContain('@xl/panel:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]')
+      expect(src, '经典全宽两列必须保留').toContain('xl:grid-cols-[2fr_1fr]')
+      expect(src, '600 面板内两列会溢出（弹窗设置卡/开关压字）→ 禁用面板两列').not.toContain(
+        '@xl/panel:grid-cols',
+      )
     }
   })
 

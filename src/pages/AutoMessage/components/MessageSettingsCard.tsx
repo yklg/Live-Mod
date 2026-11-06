@@ -65,7 +65,7 @@ const MessageSettingsCard = React.memo(() => {
 
           <div className="space-y-1">
             <Label>发送间隔（秒）</Label>
-            <div className="flex items-center space-x-2 @xl/panel:flex-wrap @xl/panel:gap-y-2">
+            <div className="flex items-center space-x-2">
               <Input
                 type="number"
                 value={scheduler.interval[0] / 1000}
