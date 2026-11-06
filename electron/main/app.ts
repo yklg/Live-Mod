@@ -129,7 +129,18 @@ async function createWindow() {
     if (win && !win.isDestroyed() && !win.isVisible()) win.show()
   })
 
-  if (VITE_DEV_SERVER_URL) {
+  if (process.env.LM_SHELL_UI === '1') {
+    // Phase 2 单窗口壳形态：主窗口变纯容器，React 应用迁移至 panelView
+    const { attachContainer } = await import('./windows/shellUI')
+    attachContainer(
+      win,
+      VITE_DEV_SERVER_URL ? { url: VITE_DEV_SERVER_URL } : { file: indexHtml },
+      preload,
+    )
+    win.show()
+    // 更新检查改挂 panelView 首帧（容器自身 webContents 不加载内容，did-finish-load 不触发）
+    updateManager.silentCheckForUpdate().catch(() => {})
+  } else if (VITE_DEV_SERVER_URL) {
     // #298
     win.loadURL(VITE_DEV_SERVER_URL)
     // Open devTool if the app is not packaged
@@ -138,10 +149,12 @@ async function createWindow() {
     win.loadFile(indexHtml)
   }
 
-  // 加载完成后检查更新
-  win.webContents.on('did-finish-load', async () => {
-    await updateManager.silentCheckForUpdate()
-  })
+  // 加载完成后检查更新（经典模式；壳容器模式见上方 panelView 分支）
+  if (process.env.LM_SHELL_UI !== '1') {
+    win.webContents.on('did-finish-load', async () => {
+      await updateManager.silentCheckForUpdate()
+    })
+  }
 
   // Make all links open with the browser, not with the application
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -149,9 +162,9 @@ async function createWindow() {
     return { action: 'deny' }
   })
 
-  // 当返回最新 providers 时推送到渲染进程
+  // 当返回最新 providers 时推送到渲染进程（经 windowManager 路由，兼容壳容器模式）
   emitter.on('providers-updated', providers => {
-    win?.webContents.send(IPC_CHANNELS.app.providersUpdated, providers)
+    windowManager.send(IPC_CHANNELS.app.providersUpdated, providers)
   })
 }
 

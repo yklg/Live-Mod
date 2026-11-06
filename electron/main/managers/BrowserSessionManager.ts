@@ -18,8 +18,10 @@ export interface BrowserSession {
   browser: playwright.Browser
   context: playwright.BrowserContext
   page: playwright.Page
-  /** attached 专属：所属壳窗口 id，断开时由会话层关自己窗口（对齐 launched 关浏览器的 UX） */
+  /** attached 专属：所属壳窗口 id（日志/崩溃重建用） */
   shellWindowId?: number
+  /** attached 专属：拆除壳承载体（窗口模式=关窗；单窗口模式=移除 pageView）。断开时由会话层调用 */
+  disposeShell?: () => Promise<void>
 }
 
 /** attach 会话建立失败的可判别错误（ipc 层据此执行 F3 降级回退） */
@@ -138,7 +140,14 @@ class BrowserSessionManager {
     }
 
     logger.success('attach 会话建立成功，壳窗口：', handle.windowId)
-    return { kind: 'attached', browser, context, page, shellWindowId: handle.windowId }
+    return {
+      kind: 'attached',
+      browser,
+      context,
+      page,
+      shellWindowId: handle.windowId,
+      disposeShell: handle.disposeWindow,
+    }
   }
 }
 

@@ -28,7 +28,6 @@ import type { ITask } from '#/tasks/ITask'
 import { createPinCommentTask } from '#/tasks/PinCommentTask'
 import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import windowManager from '#/windowManager'
-import { shellWindowManager } from '#/windows/shellWindowManager'
 
 export class AccountSession {
   private platform: IPlatform
@@ -130,10 +129,10 @@ export class AccountSession {
     // launched 结束浏览器进程（MacOS 下 context 关闭不杀进程，必须显式 close）；
     // attached 仅断 CDP 连接，绝不杀宿主（browser-shell-formalization-plan v3）
     teardownSession(this.browserSession!).catch(e => this.logger.error('无法结束会话：', e))
-    // attached：关闭自己的壳窗口（窗口层操作，对齐 launched 关浏览器的用户预期；
-    // 只关本会话窗口，不触碰其他 session——所有权守卫见 teardown.test）
-    if (this.browserSession?.kind === 'attached' && this.browserSession.shellWindowId != null) {
-      shellWindowManager.get(this.browserSession.shellWindowId)?.close()
+    // attached：拆除自己的壳承载体（窗口=关窗；单窗口=移除 pageView），
+    // 对齐 launched 关浏览器的用户预期；只拆本会话的，不触碰其他 session
+    if (this.browserSession?.kind === 'attached') {
+      this.browserSession.disposeShell?.().catch(e => this.logger.error('无法关闭壳窗口：', e))
     }
     // 关闭所有正在进行的任务
     Array.from(this.activeTasks.values()).forEach(task => {
