@@ -50,11 +50,21 @@ class ShellWindowManager {
 
     win.webContents.setUserAgent(chromeUa())
 
-    // 弹窗流壳化适配（Phase 1.5 二轮修正，真实平台验收暴露）：
-    // 保持 allow——弹窗子窗口在 attach 模式下会作为 context 新 page 出现，
-    // 满足 BuyinPlatform.login 的 context.waitForEvent('page') 契约（与 launched 模式同语义）。
-    // Electron 与 Chrome 的策略差异在"页面可关闭非脚本打开的窗口"，由下方 did-request-close 守卫还原。
+    // 弹窗流规则（与 shellUI 一致，15:04 实测 fxg 登录页存在"自复制逃逸"反嵌入模式）：
+    // 同 host+pathname 自复制弹窗 = framebuster → deny；异 URL 业务弹窗 = 适配器契约 → allow
     win.webContents.setWindowOpenHandler(({ url }) => {
+      const cur = new URL(win.webContents.getURL())
+      let dup = false
+      try {
+        const pop = new URL(url)
+        dup = cur.host === pop.host && cur.pathname === pop.pathname
+      } catch {
+        dup = false
+      }
+      if (dup) {
+        logger.info('拒绝自复制弹窗（反嵌入逃逸模式），页面留在壳内：', url.slice(0, 80))
+        return { action: 'deny' }
+      }
       logger.info('弹窗流→子窗口（保持 launched 语义）：', url)
       return { action: 'allow' }
     })
@@ -66,6 +76,10 @@ class ShellWindowManager {
     win.webContents.on('did-request-close', e => {
       logger.warn('已拒绝页面发起的壳窗口关闭（保会话主体存活）')
       e.preventDefault()
+    })
+    // 双保险（与 view 模式一致）：禁用页面 window.close，还原 Chrome 对非脚本打开窗口的忽略语义
+    win.webContents.on('dom-ready', () => {
+      win.webContents.executeJavaScript('window.close = function () {};').catch(() => {})
     })
 
     win.once('closed', () => {

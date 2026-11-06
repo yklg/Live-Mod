@@ -285,14 +285,16 @@ export function ensurePage(page: Page | null | undefined): Result.Result<Page, P
 /** 通过 \<a\> 的点击打开新网页，主要是防止部分反爬的行为 */
 export async function openUrlByElement(page: Page, url: string) {
   const context = page.context()
-  const [newPage] = await Promise.all([
-    context.waitForEvent('page'),
-    page.evaluate(url => {
-      const el = document.createElement('a')
-      el.href = url
-      el.target = '_blank'
-      el.click()
-    }, url),
-  ])
-  return newPage
+  // 壳模式（attach）兼容：弹窗可能被壳层拦截（如自复制反嵌入规则），
+  // 此时官方页会在当前页内完成同等导航——5s 内无 popup 则回退用原页面，
+  // launched 模式 popup 秒到，行为不变。
+  const popupPromise = context.waitForEvent('page', { timeout: 5000 }).catch(() => null)
+  await page.evaluate(url => {
+    const el = document.createElement('a')
+    el.href = url
+    el.target = '_blank'
+    el.click()
+  }, url)
+  const popup = await popupPromise
+  return popup ?? page
 }
