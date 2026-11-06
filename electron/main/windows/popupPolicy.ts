@@ -1,8 +1,16 @@
-// 弹窗三段决策（seamless-fix v3 · A1）——纯函数，shellUI(view 档) 与 shellWindowManager(window 档) 共同消费。
+// 弹窗决策（seamless-fix v3 · A1；fix-shell-popup-navigation-liveend Phase 2 重构）——
+// 纯函数，shellUI(view 档) 与 shellWindowManager(window 档) 共同消费。
+//
+// Phase 2 语义修正（架构级）：官方页 window.open 的本意是「打开新上下文」。
+// view 档不再把业务弹窗折叠进当前页（fold 会劫持唯一的会话 Page，触发误判下播），
+// 而是统一交给壳层「新 Tab」载体执行（决策只表达意图，执行在 shellUI/shellTabManager）。
+// 登录等确实需要同页导航的自动化链路，由会话层通过 windows/popupIntent 显式声明，
+// 决策层不按 URL 猜测（平台知识只经 ownedOrigins 注入，A5 边界不变）。
+//
 // 双承载体策略并存属平台约束驱动（view 弹窗销毁 webContents / window 无此问题），
 // 见 shellWindowManager A3 注释互引；Phase 3 末裁决窗口模式退役前禁止"统一化"误改。
 export type PopupCarrier = 'view' | 'window'
-export type PopupDecision = 'deny-selfdup' | 'fold' | 'external' | 'allow'
+export type PopupDecision = 'deny-selfdup' | 'new-tab' | 'external' | 'allow'
 
 export interface PopupInput {
   currentUrl: string
@@ -34,11 +42,12 @@ export function classifyPopup({
   }
   // window 承载体保持 allow（Phase 1 launched 语义行为锚，防误统一）
   if (carrier === 'window') return 'allow'
-  // view 承载体：同 host 异 path 业务弹窗折入当前页
-  if (cur.host === pop.host) return 'fold'
-  // 跨域但属本平台可信域（如百应登录 douyinec.com ↔ buyin.jinritemai.com）→ 折入壳内，
-  // 否则 attach 登录链路会逃逸到系统浏览器（真实缺陷：入口一键选百应 → 外部 Edge 打开登录页）
-  if (isOwnedHost(pop.host, ownedOrigins)) return 'fold'
+  // view 承载体：同 host 异 path = 官方页内的业务弹窗 → 壳内新 Tab（浏览器语义）
+  if (cur.host === pop.host) return 'new-tab'
+  // 跨域但属本平台可信域（如百应登录 douyinec.com ↔ buyin.jinritemai.com）→ 壳内新 Tab，
+  // 否则 attach 登录链路会逃逸到系统浏览器
+  if (isOwnedHost(pop.host, ownedOrigins)) return 'new-tab'
+  // 异域外链（帮助/协议页等）→ 系统浏览器（对齐主窗口行为；禁止用壳内 Tab 承载站外页面）
   return 'external'
 }
 

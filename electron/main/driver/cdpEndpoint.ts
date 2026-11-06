@@ -19,9 +19,15 @@ function validPort(port: number): boolean {
 }
 
 export function resolveCdpEndpoint(input: CdpEndpointInput): CdpEndpointResult {
-  // dev 显式固定端口优先（harness 复用约定 LM_CDP_PORT）
+  // dev 显式固定端口优先（harness 复用约定 LM_CDP_PORT）。
+  //
+  // 例外：LM_CDP_PORT='0' 是 harness/调试脚本约定「未指定 → 随机端口」的写法。
+  // 此时真实端口由 Chromium 写入 <profile>/DevToolsActivePort，必须走端口文件分支读取；
+  // 若把 '0' 判成非法端口（port-invalid），attach 会静默降级回 launch 起一个外部浏览器，
+  // 与「连接壳自身」的意图相反（P1 缺陷：harness 常设 LM_CDP_PORT=0）。
   const envPort = input.env.LM_CDP_PORT
-  if (envPort !== undefined && envPort !== '') {
+  const hasExplicitPort = envPort !== undefined && envPort !== '' && envPort !== '0'
+  if (hasExplicitPort) {
     const port = Number(envPort)
     if (!validPort(port)) return { ok: false, reason: 'port-invalid' }
     return { ok: true, port, wsEndpoint: `http://127.0.0.1:${port}` }
@@ -39,7 +45,7 @@ export function resolveCdpEndpoint(input: CdpEndpointInput): CdpEndpointResult {
   const port = Number(line1?.trim())
   if (!Number.isInteger(port)) return { ok: false, reason: 'port-file-malformed' }
   if (!validPort(port)) return { ok: false, reason: 'port-invalid' }
-  if (!line2 || !line2.trim().startsWith('/')) return { ok: false, reason: 'port-file-malformed' }
+  if (!line2?.trim().startsWith('/')) return { ok: false, reason: 'port-file-malformed' }
 
   // 实证修正（壳内登录 v3）：connectOverCDP 必须喂 HTTP 基址（内部经 /json/version 自取 ws URL）；
   // 把端口文件第 2 行的 /devtools/browser/<id> 拼进 endpoint 会让 Chromium http handler

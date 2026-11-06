@@ -67,7 +67,9 @@ export class WechatChannelPlatform
     // 视频号的商品列表不在中控台，需要额外打开新的页面
     if (isConnected) {
       this.mainPage = page
-      this.productsPage = await session.context.newPage()
+      // attach 壳模式：context.newPage() 不可用（connectOverCDP 不支持 Target.createTarget），
+      // 必须消费会话层 aux 页能力；launched 或无该能力时保持 context.newPage() 原行为
+      this.productsPage = await (session.createAuxPage?.() ?? session.context.newPage())
       await this.productsPage.goto(URLS.PRODUCTS_PAGE)
     }
     return isConnected
@@ -86,7 +88,8 @@ export class WechatChannelPlatform
   async getAccountName(session: BrowserSession): Promise<string> {
     // 视频号如果窗口过小的话无法正常获取账号名
     // 直接访问视频号首页就能搞到用户名了
-    const tempPage = await session.context.newPage()
+    // attach 壳模式：同 connect 的商品页，必须走 aux 页能力（不可用 context.newPage）
+    const tempPage = await (session.createAuxPage?.() ?? session.context.newPage())
     await tempPage.goto(URLS.INDEX_PAGE)
     const accountName = await getAccountName(tempPage, SELECTORS.ACCOUNT_NAME)
     await tempPage.close()

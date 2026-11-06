@@ -21,6 +21,22 @@ export const REGEXPS = {
   LOGIN_PAGE: /.*fxg\.jinritemai\.com\/login\/common.*/,
 }
 
+/**
+ * 中控台页面身份判据（IPlatform.isControlPageUrl 的数据源）：host 精确 + pathname 前缀。
+ * 实际落点形如 `https://fxg.jinritemai.com/ffa/content-tool/live/control`
+ * （旧版 `/ffa/buyin/dashboard/live/control` 同前缀）；登录页 `/login/*` 与罗盘等
+ * 其它域均不满足 → 壳内导航漂移会被下播观测识别为「不可观测」而非「下播」。
+ */
+/**
+ * 中控台页面身份判据（IPlatform.isControlPageUrl 的数据源）：host 精确 + 已知中控台路由白名单。
+ * 禁止用 `/ffa/` 这类站点大前缀：同站业务页（/ffa/mshop/homepage、/ffa/g/list 等）会被误判为
+ * 「仍在中控台」，页面漂移后仍按缺席判下播。现网落点 = content-tool 新版与 buyin dashboard 旧版。
+ */
+export const CONTROL_PAGE = {
+  host: 'fxg.jinritemai.com',
+  pathPrefixes: ['/ffa/buyin/dashboard/live/control', '/ffa/content-tool/live/control'],
+} as const
+
 export const SELECTORS = {
   LOGGED_IN: `[class^="index_userName"]`,
   IN_LIVE_CONTROL: `[class^="goodsPanel"]`,
@@ -41,8 +57,10 @@ export const SELECTORS = {
     /** 置顶的勾选框 */
     PIN_TOP_LABEL: '#input-comment-block-id label',
   },
+  /** 注意：overlays 只供 liveStatusWatcher 的「直播总结」确定信号使用；
+   *  不得在评论保活里每 3s 通用点击（AFK 选择器是任意 auxo 弹窗主按钮，会误触真实配置弹窗）。 */
   overlays: {
-    /** 长时间不操作弹窗的关闭按钮 */
+    /** 长时间不操作弹窗的关闭按钮（当前无运行时消费者；AFK 自动处理需真机确认专用选择器后接入） */
     AFK_CLOSE_BUTTON:
       'div.auxo-modal-content > div > div > div.auxo-modal-confirm-btns > button.auxo-btn.auxo-btn-primary',
     /** 直播结束后弹出的【直播总结】的关闭按钮 */

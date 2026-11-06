@@ -10,6 +10,17 @@ export const REGEXPS = {
   LOGIN_PAGE: /.*eos\.douyin\.com\/livesite\/login.*/,
 }
 
+/**
+ * 中控台页面身份判据（IPlatform.isControlPageUrl 的数据源）：host 精确 + pathname 前缀。
+ * 中控台落点 `https://eos.douyin.com/livesite/live/current`；登录页 `/livesite/login`
+ * 不满足 → 登录跳转不会被误认作中控台。
+ */
+/** eos 中控台页面身份判据：host 精确 + 已知中控台路由白名单（登录页 /livesite/login 不命中） */
+export const CONTROL_PAGE = {
+  host: 'eos.douyin.com',
+  pathPrefixes: ['/livesite/live/current'],
+} as const
+
 export const SELECTORS = {
   LOGGED_IN: `[class^="head-container"]`,
   IN_LIVE_CONTROL: `[class^="layout-container"]`,

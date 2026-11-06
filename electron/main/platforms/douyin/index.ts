@@ -18,17 +18,18 @@ import {
   openUrlByElement,
   toggleButton,
 } from '../helper'
-import type {
-  ICommentListener,
-  ILiveStatusWatcher,
-  IPerformComment,
-  IPerformPopup,
-  IPlatform,
-  ISendRedPacket,
+import {
+  type ICommentListener,
+  type ILiveStatusWatcher,
+  type IPerformComment,
+  type IPerformPopup,
+  type IPlatform,
+  type ISendRedPacket,
+  isControlPageUrlIn,
 } from '../IPlatform'
 import { createLiveStatusWatcher } from '../liveStatusWatcher'
 import { CompassListener, ControlListener } from './commentListener'
-import { OWNED_ORIGINS, REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
+import { CONTROL_PAGE, OWNED_ORIGINS, REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { douyinElementFinder as elementFinder } from './element-finder'
 
 const PLATFORM_NAME = '抖音小店' as const
@@ -53,10 +54,18 @@ export class DouyinPlatform
   readonly ownedOrigins = OWNED_ORIGINS
 
   public mainPage: Page | null = null
+  /** 会话引用（罗盘监听需要 BrowserSession 提供的 aux 页能力；attach 下 context.newPage 不可用） */
+  private browserSession: BrowserSession | null = null
   private commentListener: ICommentListener | null = null
   private liveWatcher: { start(): void; stop(): void } | null = null
 
+  /** 中控台页面身份判据（A2）：下播观测/导航告警用它区分「页面漂移」与「真实下播」 */
+  isControlPageUrl(url: string): boolean {
+    return isControlPageUrlIn(url, CONTROL_PAGE)
+  }
+
   async connect(browserSession: BrowserSession) {
+    this.browserSession = browserSession
     const { page } = browserSession
     const isConnected = await connect(page, {
       isInLiveControlSelector: SELECTORS.IN_LIVE_CONTROL,
@@ -127,18 +136,23 @@ export class DouyinPlatform
   }
 
   startCommentListener(onComment: (comment: LiveMessage) => void, source: 'control' | 'compass') {
-    Result.pipe(
-      ensurePage(this.mainPage),
-      Result.map(page => {
-        if (source === 'control') {
-          this.commentListener = new ControlListener(page)
-        } else {
-          this.commentListener = new CompassListener('douyin', page)
-        }
-        return this.commentListener.startCommentListener(onComment, source)
-      }),
-      Result.unwrap(),
-    )
+    // 与 buyin 同构：返回 CommentListener 的 Promise（罗盘监听失败必须能被任务层捕获并显式报错，
+    // 旧实现 Result.unwrap() 丢弃 Promise → 未处理拒绝 + UI 仍显示「监听中」的静默失败）
+    const pageResult = ensurePage(this.mainPage)
+    if (Result.isFailure(pageResult)) {
+      throw pageResult.error
+    }
+    const page = pageResult.value
+    if (source === 'control') {
+      this.commentListener = new ControlListener(page)
+    } else {
+      // 罗盘大屏需要独立页面：attach 壳模式下 context.newPage() 不可用（Target.createTarget 不支持），
+      // 必须消费 BrowserSession.createAuxPage 能力（壳内隐藏页 + nonce 寻址）
+      this.commentListener = new CompassListener('douyin', page, {
+        createAuxPage: this.browserSession?.createAuxPage,
+      })
+    }
+    return this.commentListener.startCommentListener(onComment, source)
   }
 
   stopCommentListener(): void {
@@ -146,6 +160,7 @@ export class DouyinPlatform
   }
 
   startLiveStatusWatch(onLiveEnd: () => void) {
+    const logger = createLogger('LiveStatus')
     this.liveWatcher = createLiveStatusWatcher({
       getPage: () => this.mainPage,
       signals: {
@@ -158,8 +173,12 @@ export class DouyinPlatform
           return true
         },
       },
+      // 页面身份护栏（A2/A3）：会话页被壳层折叠导航到非中控台后，
+      // 「找不到直播中 tag」是「不可观测」而不是「下播」——watcher 不计数、不 fire
+      isObservingPage: async page => this.isControlPageUrl(page.url()),
+      onUnobservable: () => logger.warn('中控台页面已离开，已暂停下播判定'),
       onLiveEnd,
-      logger: createLogger('LiveStatus'),
+      logger,
     })
     this.liveWatcher.start()
   }

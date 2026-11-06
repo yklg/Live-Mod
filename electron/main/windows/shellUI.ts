@@ -9,7 +9,9 @@
 // 监听树划分（P0-1/A1）：chrome 入口=最小树（仅 shell:* 通道），rail 入口=完整业务树
 //       （windowManager 'ui' 目标 = railView；业务推送零改动经 send→'ui' 别名路由）。
 // 几何唯一真源：shellLayout.computeShellBounds（A3）；面板开合唯一真源：panelController（A2）。
-// 弹窗三段（deny-selfdup/fold/external）与防自杀行为锚自 v3 平移不变（popupPolicy view 档）。
+// 弹窗语义（Phase 2，fix-shell-popup-navigation-liveend）：view 档默认浏览器语义=new-tab
+// （deny-selfdup / new-tab / external / window 档 allow 行为锚）；登录窗口期经 popupIntent
+// 显式声明 navigate（同页折叠旧语义），并对官方页 `if(!w) location.href` 兜底做 will-navigate 抑制。
 // 平台边界（A5）：本层平台无关——中控页 URL/登录态/attach 由会话层决定，禁止此处出现平台 if。
 
 import { randomUUID } from 'node:crypto'
@@ -28,7 +30,7 @@ import { attachEntryView, destroyEntryView, getEntryDebug, relayoutEntryView } f
 import { installExternalProtocolGuard } from './externalProtocolGuard'
 import { foldNavigate } from './foldNavigate'
 import { shouldWarnLeaveControlPage } from './leaveGuard'
-import { getNoticeBusState, resetNoticeBus } from './noticeBus'
+import { getNoticeBusState, pushNotice, resetNoticeBus } from './noticeBus'
 import {
   attachNoticeWindow,
   destroyNoticeWindow,
@@ -38,6 +40,7 @@ import {
 import { preventPageInitiatedClose } from './pageCloseGuard'
 import { clampZoom, nextZoom, ZOOM_DEFAULT, ZOOM_STEP, zoomPercent, zoomStoreKey } from './pageZoom'
 import { createPanelController } from './panelController'
+import { clearPopupMode, getPopupMode } from './popupIntent'
 import { classifyPopup } from './popupPolicy'
 import { computeEntryBounds, computeShellBounds } from './shellLayout'
 import { installShellMenu } from './shellMenu'
@@ -203,40 +206,84 @@ export function attachContainer(
       // 导航完成恢复该站点记忆缩放（官方中控台默认 100% 会被窗口裁切）
       view.webContents.on('did-finish-load', () => applyStoredZoom(view.webContents))
       view.webContents.on('did-navigate', () => applyStoredZoom(view.webContents))
+      // ===== 弹窗语义（fix-shell-popup-navigation-liveend · Phase 2 · A1）=====
+      // 默认 = 浏览器语义：官方页 window.open → 壳层**新 Tab**（同 partition），绝不再折叠当前页——
+      // fold 会劫持唯一的会话 Page，进而触发「误判下播 → 拆会话/Tab」（本次事故根因）。
+      // 例外：会话层在登录/进中控台窗口期显式声明 popupMode='navigate'（见 popupIntent.ts），
+      // 此时保留旧「同页折叠」语义（自动化反爬链路依赖），登录完成即复位。
+      const normUrl = (u: string) => {
+        try {
+          const x = new URL(u)
+          return `${x.origin}${x.pathname}${x.search}`
+        } catch {
+          return u
+        }
+      }
+      // 兜底导航抑制（E8 实测）：官方页 `const w = window.open(url); if (!w) location.href = url`
+      // 的兜底在 deny 下必然触发——新 Tab 已承载该 URL，必须拦截这次同页跳转，否则仍会劫持会话页。
+      let pendingPopupNav: { url: string; expiresAt: number } | null = null
+      view.webContents.on('will-navigate', (event, targetUrl) => {
+        if (!pendingPopupNav) return
+        if (Date.now() > pendingPopupNav.expiresAt) {
+          pendingPopupNav = null
+          return
+        }
+        if (normUrl(targetUrl) !== normUrl(pendingPopupNav.url)) return
+        event.preventDefault()
+        pendingPopupNav = null
+        logger.info(
+          'popup-fallback-navigation-suppressed（新 Tab 已承载，拦截当前页兜底跳转）：',
+          targetUrl.slice(0, 80),
+        )
+      })
       view.webContents.setWindowOpenHandler(({ url }) => {
         const decision = classifyPopup({
           currentUrl: view.webContents.getURL(),
           popupUrl: url,
           carrier: 'view',
-          // 平台层注入的可信域名：跨域登录/中控页 fold 入壳内，而非外开系统浏览器
+          // 平台层注入的可信域名：跨域登录/中控页入壳内承载，而非外开系统浏览器
           ownedOrigins: opts.popupOrigins,
         })
-        switch (decision) {
-          case 'deny-selfdup':
-            logger.info(
-              'popup-rule=deny-selfdup 拒绝自复制弹窗（反嵌入逃逸），页面留壳内：',
-              url.slice(0, 80),
-            )
-            break
-          case 'fold':
-            logger.info('popup-rule=fold 业务弹窗折入当前页：', url.slice(0, 80))
-            void foldNavigate({
-              loadURL: u => view.webContents.loadURL(u),
-              url,
-              timeoutMs: FOLD_TIMEOUT_MS,
-              log: m => logger.info(m),
-            })
-            break
-          case 'external':
-            logger.info('popup-rule=external 外链走系统浏览器：', url.slice(0, 80))
-            if (url.startsWith('http')) void shell.openExternal(url)
-            break
-          default:
-            logger.warn(
-              'popup-rule=view 档收到 allow 分类（不应发生），按 deny 处理：',
-              url.slice(0, 80),
-            )
+        if (decision === 'deny-selfdup') {
+          logger.info(
+            'popup-rule=deny-selfdup 拒绝自复制弹窗（反嵌入逃逸），页面留壳内：',
+            url.slice(0, 80),
+          )
+          return { action: 'deny' }
         }
+        if (decision === 'external') {
+          logger.info('popup-rule=external 外链走系统浏览器：', url.slice(0, 80))
+          if (url.startsWith('http')) void shell.openExternal(url)
+          return { action: 'deny' }
+        }
+        // decision === 'new-tab'
+        if (getPopupMode(view.webContents.id) === 'navigate') {
+          // 登录/进中控台窗口期：旧语义=同页折叠（自动化链路契约，见 popupIntent.ts）
+          logger.info('popup-rule=intent-navigate 登录窗口期折叠当前页：', url.slice(0, 80))
+          void foldNavigate({
+            loadURL: u => view.webContents.loadURL(u),
+            url,
+            timeoutMs: FOLD_TIMEOUT_MS,
+            log: m => logger.info(m),
+          })
+          return { action: 'deny' }
+        }
+        if (!tabManager) {
+          logger.warn('popup-rule=new-tab 壳容器未就绪，降级拒绝：', url.slice(0, 80))
+          return { action: 'deny' }
+        }
+        const popupTabId = tabManager.createPopupTab({
+          url,
+          partition: opts.partition,
+          popupOrigins: opts.popupOrigins,
+        })
+        pendingPopupNav = { url, expiresAt: Date.now() + 5000 }
+        logger.info(
+          `popup-rule=new-tab 业务弹窗开壳内新 Tab（tab=${popupTabId}）：`,
+          url.slice(0, 80),
+        )
+        // 后台打开不抢焦点，用户可能没注意到新 Tab —— 壳级通知轻提示（不阻塞操作）
+        pushNotice({ variant: 'info', description: '已在新标签页打开该页面' })
         return { action: 'deny' }
       })
       // 一道防线足够：did-request-close 拒绝页面发起的 view 销毁（A0 实证 allow 弹窗才是死因，非 close）
@@ -254,8 +301,11 @@ export function attachContainer(
     },
     unmount: view => {
       const real = (view as RealTabView).real
+      const wcId = real.webContents.id
       if (container && !container.isDestroyed()) container.contentView.removeChildView(real)
       real.webContents.close()
+      // 意图状态随 Tab 生命周期清理（wcId 可能在 Electron 内被复用，防跨会话泄漏）
+      clearPopupMode(wcId)
     },
     pushState: state => {
       windowManager.sendTo('chrome', IPC_CHANNELS.shell.tabsState, state)

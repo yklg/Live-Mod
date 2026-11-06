@@ -16,6 +16,17 @@ export const REGEXPS = {
   LOGIN_PAGE: /douyinec\.com/,
 }
 
+/**
+ * 中控台页面身份判据（IPlatform.isControlPageUrl 的数据源）：host 精确 + pathname 前缀。
+ * 中控台落点 `https://buyin.jinritemai.com/dashboard/live/control`；
+ * 登录页在 `/mpa/account/login`、跨域登录在 douyinec.com，均不满足 → 漂流可被观测。
+ */
+/** 百应中控台页面身份判据：host 精确 + 已知中控台路由白名单（不用 /dashboard/ 大前缀） */
+export const CONTROL_PAGE = {
+  host: 'buyin.jinritemai.com',
+  pathPrefixes: ['/dashboard/live/control'],
+} as const
+
 export const SELECTORS = {
   ...DY_SELECTORS,
   LOGGED_IN: '[class^="header"]',

@@ -10,6 +10,8 @@ import type { SessionKind } from '#/driver/types'
 import { createLogger } from '#/logger'
 import { runtimeEnvState } from '#/platforms/runtimeEnvState'
 import { findChromium } from '#/utils/checkChrome'
+import { setPopupMode as setShellPopupMode } from '#/windows/popupIntent'
+import { isShellUIEnabled } from '#/windows/shellUI'
 import { shellWindowManager } from '#/windows/shellWindowManager'
 
 export interface BrowserSession {
@@ -18,10 +20,25 @@ export interface BrowserSession {
   browser: playwright.Browser
   context: playwright.BrowserContext
   page: playwright.Page
-  /** attached 专属：所属壳窗口 id（日志/崩溃重建用） */
+  /** attached 专属：会话所属账号 id（辅助页 partition / 日志；launched 无） */
+  accountId?: string
+  /** attached 专属：所属壳窗口 id（日志/崩溃重建用；壳 UI 模式下即账号 pageView 的 webContents.id） */
   shellWindowId?: number
   /** attached 专属：拆除壳承载体（窗口模式=关窗；单窗口模式=移除 pageView）。断开时由会话层调用 */
   disposeShell?: () => Promise<void>
+  /**
+   * attached 壳模式专属（fix-shell-popup-navigation-liveend Phase 2 · 会话层↔壳层弹窗契约）：
+   * 声明本会话页后续弹窗语义 — 'navigate'=官方页 window.open 折叠为当前页导航（登录窗口期旧语义），
+   * null=浏览器语义（壳内新 Tab）。登录/进中控台等自动化链路在需要「同页折叠」时成对使用。
+   * 不提供本方法的场景：launched（弹窗天然是新页）、窗口承载模式（弹窗是 allow 真窗口，无需意图）。
+   */
+  setPopupMode?: (mode: 'navigate' | null) => void
+  /**
+   * 辅助页能力（seamless-fix §C / A4）：补偿 attached 下 `context.newPage()` 不可用的缺口。
+   * launched=context.newPage()；attached=壳层隐藏窗口新建 target + nonce 寻址。
+   * 用途：罗盘大屏等只被 app 监听的页面。调用方负责在不再需要时 close 返回的 Page。
+   */
+  createAuxPage?: (opts?: { url?: string }) => Promise<playwright.Page>
 }
 
 /** attach 会话建立失败的可判别错误（ipc 层据此执行 F3 降级回退） */
@@ -76,7 +93,15 @@ class BrowserSessionManager {
       storageState,
     })
     const page = await context.newPage()
-    return { kind: 'launched', browser, context, page }
+    const session: BrowserSession = { kind: 'launched', browser, context, page }
+    // launched 的新页面就是浏览器上下文里的普通 Tab：createAuxPage 直接用它。
+    // 不提供 setPopupMode——launched 弹窗天然是新页面，无「折叠当前页 vs 新 Tab」语义选择。
+    session.createAuxPage = async (opts?: { url?: string }) => {
+      const auxPage = await context.newPage()
+      if (opts?.url) await auxPage.goto(opts.url)
+      return auxPage
+    }
+    return session
   }
 
   /**
@@ -143,14 +168,43 @@ class BrowserSessionManager {
     }
 
     logger.success('attach 会话建立成功，壳窗口：', handle.windowId)
-    return {
+    const session: BrowserSession = {
       kind: 'attached',
       browser,
       context,
       page,
+      accountId,
       shellWindowId: handle.windowId,
       disposeShell: handle.disposeWindow,
     }
+
+    // 弹窗意图（Phase 2）：只有单窗口壳 UI 存在「折叠当前页 or 壳内新 Tab」的语义选择，
+    // 且 handle.windowId 此时确是 pageView 的 webContents.id（窗口模式下是 BrowserWindow.id，
+    // 其弹窗走 allow 真窗口 = 浏览器语义，不该也不适用意图表）。平台层经可选方法消费，无感。
+    if (isShellUIEnabled()) {
+      session.setPopupMode = mode => setShellPopupMode(handle.windowId, mode)
+    }
+
+    // 辅助页（A4）：attach 下 context.newPage() 不可用（Target.createTarget 不支持 pageView），
+    // 改由壳层隐藏窗口新建独立 target，再用 nonce 精确寻址（判据仍是 URL 后缀，pageFactory 契约不变）。
+    session.createAuxPage = async (opts?: { url?: string }) => {
+      const aux = shellWindowManager.openAux(accountId)
+      try {
+        const auxPage = await locateByNonce({
+          browser: browser as never,
+          nonce: aux.nonce,
+          disposeWindow: aux.disposeWindow,
+        })
+        if (opts?.url) await auxPage.goto(opts.url)
+        return auxPage
+      } catch (e) {
+        // locateByNonce 超时会自行 dispose；此处兜住「寻址成功后 goto 失败」等路径，防隐藏窗口泄漏
+        await aux.disposeWindow().catch(() => {})
+        throw e
+      }
+    }
+
+    return session
   }
 }
 

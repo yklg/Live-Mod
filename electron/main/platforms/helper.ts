@@ -287,9 +287,9 @@ export function ensurePage(page: Page | null | undefined): Result.Result<Page, P
  *  关闭旧页前必须 `if (newPage !== page)` 判等——否则会把会话当前页关成死对象，后续 waitForSelector 必抛 Target closed。 */
 export async function openUrlByElement(page: Page, url: string) {
   const context = page.context()
-  // 壳模式（attach）兼容：弹窗可能被壳层拦截（如自复制反嵌入规则），
-  // 此时官方页会在当前页内完成同等导航——5s 内无 popup 则回退用原页面，
-  // launched 模式 popup 秒到，行为不变。
+  // 壳模式（attach）兼容（Phase 2 更新）：业务弹窗默认开壳内新 Tab；登录/刷新等自动化窗口期
+  // 由平台层显式 `session.setPopupMode('navigate')` 声明为同页折叠（此时 5s 内无 popup → 返回原页，
+  // 与 launched popup 秒到行为区分）；调用方必须判等 `newPage !== page` 再决定是否关闭旧页。
   const popupPromise = context.waitForEvent('page', { timeout: 5000 }).catch(() => null)
   await page.evaluate(url => {
     const el = document.createElement('a')

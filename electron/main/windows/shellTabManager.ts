@@ -28,8 +28,10 @@ export interface TabView {
   setBounds: (b: { x: number; y: number; width: number; height: number }) => void
 }
 
+export type TabKind = 'account' | 'free' | 'popup'
+
 export interface TabViewOptions {
-  kind: 'account' | 'free'
+  kind: TabKind
   accountId?: string
   partition: string
   /** 账号所属平台的可信域名（弹窗策略跨域 fold 白名单，随会话层注入；free tab 无） */
@@ -65,6 +67,18 @@ export interface ShellTabManagerDeps {
 
 export interface ShellTabManager {
   createTab(opts?: { url?: string; accountId?: string; popupOrigins?: readonly string[] }): number
+  /**
+   * 浏览器语义弹窗承载（fix-shell-popup-navigation-liveend · Phase 2 · A1）：
+   * 官方页 window.open 的「新上下文」意图由壳层新 Tab 表达——独立 Tab、复用 opener 的 partition
+   * （登录态一致）、不进入账号幂等映射。默认**后台打开**（不抢当前 Tab 的 active）：
+   * 任务/会话依赖中控台页保持前台运行，且用户可见新 Tab；需要浏览器式前台时显式传 activate:true。
+   */
+  createPopupTab(opts: {
+    url: string
+    partition: string
+    activate?: boolean
+    popupOrigins?: readonly string[]
+  }): number
   closeTab(id: number): void
   activateTab(id: number): void
   navigate(id: number, url: string): Promise<void>
@@ -74,7 +88,7 @@ export interface ShellTabManager {
   tabIdForAccount(accountId: string): number | null
   webContentsIdOf(tabId: number): number
   /** 导航离开护栏/会话层查询用 */
-  tabInfoOf(tabId: number): { kind: 'account' | 'free'; accountId: string | null } | null
+  tabInfoOf(tabId: number): { kind: TabKind; accountId: string | null } | null
   hasActiveTab(): boolean
   /** 面板控制器算好 page bounds 后应用到 active view（无 active → 空操作） */
   applyPageBounds(b: { x: number; y: number; width: number; height: number } | null): void
@@ -102,7 +116,7 @@ export const FREE_TAB_PARTITION = 'persist:lm-shell-browser'
 export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManager {
   interface Tab {
     id: number
-    kind: 'account' | 'free'
+    kind: TabKind
     accountId: string | null
     view: TabView
   }
@@ -157,6 +171,11 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     url?: string
     accountId?: string
     popupOrigins?: readonly string[]
+    /** popup 专用：显式 partition（opener 的账号 partition）；kind 默认按 accountId 推导 */
+    kind?: TabKind
+    partition?: string
+    /** false = 后台打开（保留当前 active Tab）；默认 true（浏览器式前台） */
+    activate?: boolean
   }): number => {
     if (opts.accountId) {
       const existing = accountIndex.get(opts.accountId)
@@ -171,18 +190,23 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     }
     seq += 1
     const id = seq
-    const kind: 'account' | 'free' = opts.accountId ? 'account' : 'free'
+    const kind: TabKind = opts.kind ?? (opts.accountId ? 'account' : 'free')
+    const partition =
+      opts.partition ?? (opts.accountId ? accountTabPartition(opts.accountId) : FREE_TAB_PARTITION)
     const view = deps.newView({
       kind,
       accountId: opts.accountId,
-      partition: opts.accountId ? accountTabPartition(opts.accountId) : FREE_TAB_PARTITION,
+      partition,
       popupOrigins: opts.popupOrigins,
     })
     for (const ev of BRIDGE_EVENTS) view.webContents.on(ev, () => pushSoon())
     deps.mount(view, 0) // 层级铁律：pageView 恒 index 0
     tabs.push({ id, kind, accountId: opts.accountId ?? null, view })
     if (opts.accountId) accountIndex.set(opts.accountId, id)
+    const prevActiveId = activeId
     activeId = id
+    // 后台打开语义（popup 默认）：不抢 active，但新 view 仍需可见性/几何正确（由 create 末尾重排保证）
+    if (opts.activate === false && prevActiveId !== 0) activeId = prevActiveId
     applyVisibility()
     if (opts.url) void view.webContents.loadURL(opts.url).catch(() => {})
     pushNow()
@@ -215,6 +239,15 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
 
   return {
     createTab: create,
+    createPopupTab(opts) {
+      return create({
+        url: opts.url,
+        kind: 'popup',
+        partition: opts.partition,
+        popupOrigins: opts.popupOrigins,
+        activate: opts.activate ?? false,
+      })
+    },
     closeTab: close,
     activateTab(id) {
       const t = find(id)

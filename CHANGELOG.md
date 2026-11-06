@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### 🚀 Features
+
+- 壳内弹窗改为浏览器语义：官方中控台页面 `window.open`/`target=_blank` 不再折叠替换当前页，统一由壳内**新 Tab** 承载（复用 opener 的账号 partition 保持登录态；默认后台打开，任务依赖的中控台 Tab 保持前台运行）；登录/进中控台等自动化窗口期由会话层显式声明同页折叠意图（`popupIntent`），登录完成即复位
+- 评论监听健壮性：修复 `ControlListener.keepPageRunning` 死代码（`isRunning` 从未置 true，保活从未执行；修复后**只点「新评论」按钮**，不再通用点击 auxo 弹窗主按钮——避免误触真实配置弹窗、也不抢走下播判定专用的「直播总结」信号）；新增评论通道存活探针（连续 30s 无非空 `comment/info` 数据 → 日志 + toast 提示，不静默、不停止监听，60s 冷却；解析失败告警同样 60s 冷却防刷屏）；`CompassListener` 在壳内 attach 模式改用新的 `BrowserSession.createAuxPage`（隐藏窗口 + nonce 寻址），不再依赖 attach 下不可用的 `context.newPage()`，且失败路径回收 aux 载体并抛出原错误（不再静默丢弃 Promise）
+- 会话页身份观测：`AccountSession` 监听主 frame 导航，离开中控台且任务运行中时提示「中控台页面已离开，任务可能失效」（每段离开一次，回中控页复位）；平台层新增 `IPlatform.isControlPageUrl` 契约（域名知识仍在平台层），身份判据按**已知中控台路由白名单**匹配（`/ffa/content-tool/live/control`、`/ffa/buyin/dashboard/live/control`、`/dashboard/live/control`、`/livesite/live/current`），同站业务页/菜单漂移不再被误判为「仍在中控台」
+
+### 🐞 Bug Fixes
+
+- 修复壳内点击中控台功能导致「当前页被替换 → 误判直播已结束 → 直接断开并销毁会话/Tab」：`liveStatusWatcher` 新增页面身份观测（`isObservingPage`/`onUnobservable`）——页面已离开中控台时**不计数、不判下播**，恢复可观测后原 armed 语义不变；同时新增弹窗兜底导航抑制（官方页 `if(!w) location.href` 兜底不再劫持当前页）
+- 修复误判下播的破坏性后果：`handleLiveEnded` 拆分为「停止全部任务 + 通知」，**不再自动断开/销毁会话与 Tab**（断开由用户显式操作；实测「直播总结」误判时不再丢中控台页面）
+- 修复 `WebContentsView` 上页面 `window.close()` 无守卫的隐患：明确弹窗策略不再依赖 `allow`（allow 产生不可管理的原生窗口），自复制弹窗保持 deny
+- 修复 `LM_CDP_PORT=0` 被判非法端口导致 attach 静默降级外部浏览器：`'0'` 按「随机端口」处理（走 `DevToolsActivePort` 发现链）
+- 修复评论监听失败静默：抖音小店 `startCommentListener` 丢弃 Promise（罗盘监听失败无任何报错、UI 仍显示监听中）——改为与会话层同构的返回 Promise，失败可被任务层捕获
+
 ## v1.7.0
 
 ### 🚀 Features

@@ -9,8 +9,13 @@ import {
   getItemFromVirtualScroller,
   toggleButton,
 } from '../helper'
-import type { IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
-import { OWNED_ORIGINS, REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
+import {
+  type IPerformComment,
+  type IPerformPopup,
+  type IPlatform,
+  isControlPageUrlIn,
+} from '../IPlatform'
+import { CONTROL_PAGE, OWNED_ORIGINS, REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { douyinEosElementFinder as elementFinder } from './element-finder'
 
 const PLATFORM_NAME = '抖音团购' as const
@@ -23,6 +28,14 @@ export class DouyinEosPlatform implements IPlatform, IPerformPopup, IPerformComm
   readonly _isPerformPopup = true
   readonly ownedOrigins = OWNED_ORIGINS
   public mainPage: Page | null = null
+
+  /**
+   * 中控台页面身份判据（A2）：团购未实现 liveStatusWatcher，本方法先补齐平台契约，
+   * 供会话层导航告警/未来下播观测使用（登录页 /livesite/login 不算中控台）。
+   */
+  isControlPageUrl(url: string): boolean {
+    return isControlPageUrlIn(url, CONTROL_PAGE)
+  }
 
   async connect(browserSession: BrowserSession) {
     const { page } = browserSession

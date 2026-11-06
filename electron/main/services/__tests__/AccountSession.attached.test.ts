@@ -51,6 +51,8 @@ const h = vi.hoisted(() => {
       page: { on: vi.fn(), close: async () => {} },
       context: { storageState: async () => ({ cookies: [], origins: [] }) },
       browser: { close: async () => {} },
+      // attached 壳承载体拆除钩子（真实 BrowserSession 由 createAttachedSession 提供）
+      disposeShell: vi.fn(async () => {}),
     }
   }
   function makeSessionShape(kind: 'launched' | 'attached') {
@@ -129,22 +131,29 @@ beforeEach(() => {
   h.emitted.length = 0
   h.created.length = 0
   h.builtShapes.length = 0
+  h.task.start.mockClear()
+  h.task.stop.mockClear()
 })
 
-describe('attached 会话编排（TC-I5 ~ TC-I7）', () => {
-  it('TC-I5 [下播链路] attached：事件序保持 + 断开走 teardownSession', async () => {
+describe('attached 会话编排（TC-I5 ~ TC-I8）', () => {
+  it('TC-I5 [下播链路去破坏化] attached：停任务 + 一次 liveEndedEvent，不拆会话/Tab、不走 teardown', async () => {
     const session = await setupAttached()
     const platform = h.created[0]
+    const disconnectSpy = vi.spyOn(session, 'disconnect')
     await session.startTask({ type: 'auto-popup', config: {} } as LiveControlTask)
     h.sends.length = 0
 
     platform.onLiveEnd!()
 
-    const endedIdx = h.sends.findIndex(s => s.channel === C.liveEndedEvent)
-    const discIdx = h.sends.findIndex(s => s.channel === C.disconnectedEvent)
-    expect(endedIdx).toBeGreaterThanOrEqual(0)
-    expect(discIdx).toBeGreaterThan(endedIdx)
-    expect(h.teardownCalls).toHaveLength(1) // 经守卫而非直接 browser.close
+    expect(h.sends.filter(s => s.channel === C.liveEndedEvent)).toHaveLength(1)
+    expect(h.task.stop).toHaveBeenCalledTimes(1)
+    expect(platform.stopCalls).toBe(1)
+    // 核心契约（fix-shell-popup-navigation-liveend A3）：下播只停任务，会话与壳内 Tab 保留
+    expect(disconnectSpy).not.toHaveBeenCalled()
+    expect(h.sends.filter(s => s.channel === C.disconnectedEvent)).toHaveLength(0)
+    expect(h.teardownCalls).toHaveLength(0)
+    // 壳承载体（Tab/pageView）也不能被拆：只有手动 disconnect 才 disposeShell
+    expect(h.builtShapes.at(-1)!.disposeShell).not.toHaveBeenCalled()
   })
 
   it('TC-I6 [混合隔离] 断开 attached 会话，teardown 入参 kind=attached（launched 会话不受波及）', async () => {
@@ -162,5 +171,22 @@ describe('attached 会话编排（TC-I5 ~ TC-I7）', () => {
     await setupAttached()
     const shape = h.builtShapes.at(-1)!
     expect(shape.page.on).toHaveBeenCalledWith('close', expect.any(Function))
+  })
+
+  it('TC-I8 [会话保留后可手动断开] 下播后 disconnect 照旧走 teardownSession 并通知渲染层', async () => {
+    const session = await setupAttached()
+    const platform = h.created[0]
+    const shape = h.builtShapes.at(-1)!
+    platform.onLiveEnd!()
+    h.sends.length = 0
+
+    session.disconnect()
+
+    expect(h.teardownCalls).toHaveLength(1)
+    expect(h.teardownCalls[0].kind).toBe('attached')
+    expect(h.sends.filter(s => s.channel === C.disconnectedEvent)).toHaveLength(1)
+    // disposeShell 是 attached 的壳拆除钩子（单窗口=移除 pageView / 窗口模式=关窗）：
+    // 手动断开才拆，下播链路（上一步）不得触碰它
+    expect(shape.disposeShell).toHaveBeenCalledTimes(1)
   })
 })

@@ -336,3 +336,79 @@ describe('shellTabManager 异常与事件桥（TC-T9~T11）', () => {
     expect(f.layoutCallsOf()).toBe(5)
   })
 })
+
+// ===== 浏览器语义弹窗承载（fix-shell-popup-navigation-liveend · Phase 2 · A1）=====
+// 契约：
+// - createPopupTab 使用 opener 的显式 partition（登录态一致），kind='popup'，不进入账号幂等映射；
+// - 默认**后台打开**（不抢 active Tab：任务/会话依赖中控台页保持前台运行）；activate:true 时前台；
+// - popup Tab 与账号 Tab 生命周期解耦：关 popup 不影响 accountIndex；关 account 不波及 popup。
+describe('shellTabManager 弹窗 Tab（TC-T14~T16）', () => {
+  it('TC-T14 [partition 透传·kind] 弹窗 Tab 使用显式账号 partition，kind=popup，且不占账号映射', () => {
+    const f = setup()
+    const accountTab = f.manager.createTab({ accountId: 'a1' })
+    const popupTab = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/screen/anchor/shop?live_room_id=1',
+      partition: accountTabPartition('a1'),
+      popupOrigins: ['jinritemai.com'],
+    })
+    expect(popupTab).not.toBe(accountTab)
+    const opts = f.newView.mock.calls.at(-1)?.[0]
+    expect(opts).toMatchObject({
+      kind: 'popup',
+      partition: accountTabPartition('a1'),
+      popupOrigins: ['jinritemai.com'],
+    })
+    expect(opts?.accountId).toBeUndefined()
+    // 账号幂等映射不被 popup 污染
+    expect(f.manager.tabIdForAccount('a1')).toBe(accountTab)
+    expect(f.manager.tabInfoOf(popupTab)).toEqual({ kind: 'popup', accountId: null })
+    expect(f.manager.tabInfoOf(accountTab)).toEqual({ kind: 'account', accountId: 'a1' })
+    const popupFake = f.fakeOf(popupTab)
+    expect(popupFake.wc.url).toBe(
+      'https://compass.jinritemai.com/screen/anchor/shop?live_room_id=1',
+    )
+  })
+
+  it('TC-T15 [后台打开] 默认不抢 active：当前 Tab 不变，popup view 不可见；activate:true 时前台', () => {
+    const f = setup()
+    const accountTab = f.manager.createTab({ accountId: 'a1' })
+    const before = f.manager.state().activeId
+    const popupTab = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/x',
+      partition: accountTabPartition('a1'),
+    })
+    expect(before).toBe(accountTab)
+    expect(f.manager.state().activeId).toBe(accountTab) // 后台：不抢 active
+    expect(f.fakeOf(popupTab).view.setVisible).toHaveBeenLastCalledWith(false)
+    expect(f.fakeOf(accountTab).view.setVisible).toHaveBeenLastCalledWith(true)
+
+    const front = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/y',
+      partition: accountTabPartition('a1'),
+      activate: true,
+    })
+    expect(f.manager.state().activeId).toBe(front)
+    expect(f.fakeOf(accountTab).view.setVisible).toHaveBeenLastCalledWith(false)
+  })
+
+  it('TC-T16 [生命周期解耦] 关 popup 不影响账号映射/active；关账号不波及 popup 内容', () => {
+    const f = setup()
+    const accountTab = f.manager.createTab({ accountId: 'a1' })
+    const popupTab = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/x',
+      partition: accountTabPartition('a1'),
+    })
+    f.manager.closeTab(popupTab)
+    expect(f.manager.tabIdForAccount('a1')).toBe(accountTab)
+    expect(f.manager.state().tabs.some(t => t.id === popupTab)).toBe(false)
+    // 再开一个 popup，关闭账号 Tab 时它仍存活（popup 不随账号复用/迁移）
+    const popup2 = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/z',
+      partition: accountTabPartition('a1'),
+    })
+    f.manager.closeTab(accountTab)
+    expect(f.manager.state().tabs.some(t => t.id === popup2)).toBe(true)
+    expect(f.manager.tabIdForAccount('a1')).toBeNull()
+    expect(f.fakeOf(popup2).wc.destroyed).toBe(false)
+  })
+})

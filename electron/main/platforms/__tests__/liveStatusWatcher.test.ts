@@ -11,10 +11,25 @@ type SignalState = {
   ended: boolean
   throwOn: null | 'live' | 'ended'
   pageNull: boolean
+  /** 页面身份观测结果（true=仍在中控台） */
+  observing: boolean
 }
 
-function setup(overrides?: { pollIntervalMs?: number; missThreshold?: number }) {
-  const state: SignalState = { live: false, ended: false, throwOn: null, pageNull: false }
+function setup(overrides?: {
+  pollIntervalMs?: number
+  missThreshold?: number
+  /** 提供页面身份观测能力（isObservingPage/onUnobservable） */
+  observePage?: boolean
+  /** 身份观测自身抛错（验证「单轮异常跳过」容错不变） */
+  observeThrows?: boolean
+}) {
+  const state: SignalState = {
+    live: false,
+    ended: false,
+    throwOn: null,
+    pageNull: false,
+    observing: true,
+  }
   const checkLive = vi.fn(async () => {
     if (state.throwOn === 'live') throw new Error('Execution context was destroyed')
     return state.live
@@ -24,6 +39,11 @@ function setup(overrides?: { pollIntervalMs?: number; missThreshold?: number }) 
     return state.ended
   })
   const onLiveEnd = vi.fn()
+  const onUnobservable = vi.fn()
+  const isObservingPage = vi.fn(async () => {
+    if (overrides?.observeThrows) throw new Error('Execution context was destroyed')
+    return state.observing
+  })
   const loggerStub: Record<string, unknown> = {
     info: vi.fn(),
     success: vi.fn(),
@@ -35,19 +55,33 @@ function setup(overrides?: { pollIntervalMs?: number; missThreshold?: number }) 
   loggerStub.scope = loggerStub
   const logger = loggerStub as unknown as Parameters<typeof createLiveStatusWatcher>[0]['logger']
   const fakePage = { isClosed: () => false } as unknown as Page
+  const { pollIntervalMs, missThreshold, observePage } = overrides ?? {}
   const watcher = createLiveStatusWatcher({
     getPage: () => (state.pageNull ? null : fakePage),
     signals: { checkLive, checkEnded },
     onLiveEnd,
     logger,
-    ...overrides,
+    ...(pollIntervalMs !== undefined ? { pollIntervalMs } : {}),
+    ...(missThreshold !== undefined ? { missThreshold } : {}),
+    ...(observePage ? { isObservingPage, onUnobservable } : {}),
   })
-  const interval = overrides?.pollIntervalMs ?? 5000
+  const interval = pollIntervalMs ?? 5000
   /** 冲刷首帧轮询的微任务 */
   const flush = () => vi.advanceTimersByTimeAsync(0)
   /** 推进 n 轮轮询 */
   const tick = (n = 1) => vi.advanceTimersByTimeAsync(n * interval)
-  return { state, checkLive, checkEnded, onLiveEnd, logger, watcher, flush, tick }
+  return {
+    state,
+    checkLive,
+    checkEnded,
+    onLiveEnd,
+    onUnobservable,
+    isObservingPage,
+    logger,
+    watcher,
+    flush,
+    tick,
+  }
 }
 
 beforeEach(() => {
@@ -236,6 +270,115 @@ describe('liveStatusWatcher 异常与边界（TC-U1 ~ TC-U7）', () => {
     t.state.live = false
     await vi.advanceTimersByTimeAsync(1000) // miss 1 = 阈值 → 触发
     expect(t.onLiveEnd).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+// ===== A3 页面身份观测（缺席 ≠ 下播）=====
+// 契约：提供 isObservingPage 时，不可观测的轮次「不查信号、不计数、绝不 fire」，
+// onUnobservable 每次进入不可观测只回调一次；恢复可观测后 armed/missThreshold 原语义不变。
+describe('liveStatusWatcher 页面身份观测（A3 / TC-O1 ~ TC-O5）', () => {
+  it('TC-O1 [不可观测不计数不 fire] 已 armed 后页面漂移：停查信号、缺席计数归零、只回调一次', async () => {
+    const t = setup({ observePage: true })
+    t.state.live = true
+    t.watcher.start()
+    await t.flush() // 首帧：可观测 + 直播中 → armed
+    expect(t.checkEnded).toHaveBeenCalledTimes(1)
+
+    t.state.observing = false // 壳层把会话页折叠导航走 → 不再可观测
+    await t.tick(10) // 持续不可观测：即使「找不到直播中 tag」也不计数、不触发
+    expect(t.onLiveEnd).not.toHaveBeenCalled()
+    expect(t.checkLive).toHaveBeenCalledTimes(1) // 漂移后不再探测信号
+    expect(t.checkEnded).toHaveBeenCalledTimes(1)
+    expect(t.onUnobservable).toHaveBeenCalledTimes(1) // 连续不可观测只回调一次
+    t.watcher.stop()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('TC-O2 [onUnobservable 恰好一次] 恢复可观测后再次进入可再回调（进入沿触发）', async () => {
+    const t = setup({ observePage: true })
+    t.state.live = true
+    t.watcher.start()
+    await t.flush() // 可观测
+
+    t.state.observing = false
+    await t.tick(3)
+    expect(t.onUnobservable).toHaveBeenCalledTimes(1)
+
+    t.state.observing = true // 回到中控台：清不可观测标记
+    await t.tick(2)
+    expect(t.onUnobservable).toHaveBeenCalledTimes(1) // 可观测期间不再回调
+
+    t.state.observing = false // 再次漂移：进入沿 → 第二次回调
+    await t.tick(2)
+    expect(t.onUnobservable).toHaveBeenCalledTimes(2)
+    t.watcher.stop()
+  })
+
+  it('TC-O3 [恢复后语义保持] 漂移清零缺席计数，但 armed 锁存保留：回中控台后重新攒满阈值才触发', async () => {
+    const t = setup({ observePage: true })
+    t.state.live = true
+    t.watcher.start()
+    await t.flush() // armed
+    t.state.live = false
+    await t.tick(2) // miss 1、2（阈值 3）
+    expect(t.onLiveEnd).not.toHaveBeenCalled()
+
+    t.state.observing = false // 漂移：missCount 归零
+    await t.tick(5)
+    expect(t.checkLive).toHaveBeenCalledTimes(3) // armed 轮 + 2 轮缺席后不再探测
+    expect(t.onLiveEnd).not.toHaveBeenCalled()
+
+    t.state.observing = true // 恢复可观测：若 armed 丢失则永不触发；若 miss 未清零则此处会提前触发
+    await t.tick(2) // miss 1、2
+    expect(t.onLiveEnd).not.toHaveBeenCalled()
+    await t.tick(1) // miss 3 → 触发（armed 保持 + miss 从零开始）
+    expect(t.onLiveEnd).toHaveBeenCalledTimes(1)
+  })
+
+  it('TC-O4 [未 armed 语义不变] 漂移期间不产生 armed；恢复后须先观测到直播中才武装', async () => {
+    const t = setup({ observePage: true })
+    t.state.observing = false // 连接后页面就不在中控台
+    t.watcher.start()
+    await t.flush()
+    await t.tick(5)
+    expect(t.onUnobservable).toHaveBeenCalledTimes(1)
+    expect(t.checkLive).not.toHaveBeenCalled()
+
+    t.state.observing = true // 回中控台，但直播中信号缺席（未开播/待命）
+    await t.tick(10)
+    expect(t.onLiveEnd).not.toHaveBeenCalled() // 未 armed：缺席永不触发
+
+    t.state.live = true // 观测到直播中 → armed
+    await t.tick(1)
+    t.state.live = false
+    await t.tick(3) // 完整 3 连缺席 → 触发
+    expect(t.onLiveEnd).toHaveBeenCalledTimes(1)
+  })
+
+  it('TC-O5 [无身份能力行为不变] 未提供 isObservingPage 时保持原缺席计数语义、不回调 onUnobservable', async () => {
+    const t = setup()
+    t.state.live = true
+    t.watcher.start()
+    await t.flush() // armed
+    t.state.live = false
+    await t.tick(3)
+    expect(t.onLiveEnd).toHaveBeenCalledTimes(1)
+    expect(t.onUnobservable).not.toHaveBeenCalled()
+    expect(t.isObservingPage).not.toHaveBeenCalled()
+  })
+
+  it('TC-O6 [异常容错不变] 身份观测自身抛错：本轮跳过（不计数、不 fire），轮询链存活', async () => {
+    const t = setup({ observePage: true, observeThrows: true })
+    t.state.live = true
+    t.watcher.start()
+    await t.flush() // 首帧观测抛错 → 本轮跳过
+    expect(t.onLiveEnd).not.toHaveBeenCalled()
+    expect(t.checkLive).not.toHaveBeenCalled()
+    expect(t.onUnobservable).not.toHaveBeenCalled() // 抛错 ≠ 进入不可观测
+    expect(t.logger.verbose).toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(1) // 轮询链存活
+    t.watcher.stop()
     expect(vi.getTimerCount()).toBe(0)
   })
 })

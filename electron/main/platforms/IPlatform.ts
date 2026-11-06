@@ -78,10 +78,42 @@ export function isLiveStatusWatcher(
   return '_isLiveStatusWatcher' in platform && platform._isLiveStatusWatcher === true
 }
 
+/**
+ * 中控台页面身份判据（`IPlatform.isControlPageUrl` 的配套纯函数）：
+ * 精确 host + pathname 前缀匹配。任何无法解析的 URL 都归约为 false（禁止裸抛）。
+ *
+ * 为什么放在契约模块：host/路径前缀这类**平台域名知识必须留在各平台 constant.ts**（A5 边界），
+ * 但「URL 解析 + 异常归约」是三个平台共用的纯逻辑，放这里避免三份 try/catch 演化出差异。
+ */
+/** 中控台页面身份判据的数据源（平台层 constant 提供；A5：域名/路由知识归平台层） */
+export interface ControlPagePattern {
+  host: string
+  /** 已知中控台路由前缀白名单（禁止用站点大前缀：同站业务页漂移会被误判为「仍在中控台」） */
+  pathPrefixes: readonly string[]
+}
+
+export function isControlPageUrlIn(url: string, pattern: ControlPagePattern): boolean {
+  try {
+    const parsed = new URL(url)
+    return (
+      parsed.hostname === pattern.host &&
+      pattern.pathPrefixes.some(prefix => parsed.pathname.startsWith(prefix))
+    )
+  } catch {
+    return false
+  }
+}
+
 export interface IPlatform {
   get platformName(): string
   /** 本平台登录/中控链路可信域名后缀（attach 壳内跨域 fold 白名单；A5：域名知识归平台层） */
   readonly ownedOrigins?: readonly string[]
+  /**
+   * 当前 URL 是否仍在中控台（下播判定与导航告警的页面身份判据）。
+   * 返回 false = 页面已漂移出中控台（登录页/业务中转页/罗盘等），调用方应视为「不可观测」而不是「下播」。
+   * 平台未实现 → 调用方跳过观测（行为与改造前一致）。
+   */
+  isControlPageUrl?(url: string): boolean
   /** 连接到中控台，最终停留在中控台页面 */
   connect(browserSession: BrowserSession): Promise<boolean>
   /** 登录 */

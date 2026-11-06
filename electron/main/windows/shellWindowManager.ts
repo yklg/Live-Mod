@@ -104,6 +104,60 @@ class ShellWindowManager {
     }
   }
 
+  /**
+   * 辅助页承载体（fix-shell-popup-navigation-liveend A4）：补偿 attached 会话缺失的「新建页面」能力——
+   * 壳 UI 里会话页是 pageView，CDP 的 `Target.createTarget` 对 WebContentsView 不受支持，
+   * `context.newPage()` 在 attach 下必然失败（seamless-fix §C）。这里用**隐藏 BrowserWindow**
+   * 新建一个独立 target：同 partition（登录态一致）+ 同 UA 基线，再交给 pageFactory 按 nonce 寻址。
+   *
+   * 用途：罗盘直播大屏等「只被 app 监听、不需要用户看见」的辅助页（CompassListener/视频号）。
+   * 注意：show:false 的窗口在 Chromium 属后台页，定时器/动画会被节流，故**不得**承载需要正常
+   * 渲染节奏的业务页；关闭由调用方持有 disposeWindow 负责（会话层 createAuxPage 已接住）。
+   */
+  openAux(accountId: string): ShellHandle {
+    const nonce = `lm-aux-nonce-${accountId}-${randomUUID()}`
+    const win = new BrowserWindow({
+      title: `Live Mod 辅助页 - ${accountId}`,
+      width: 1280,
+      height: 800,
+      show: false,
+      webPreferences: {
+        // 与窗口档同口径（v4 评审 P1）：独立 partition 持久化登录态、隔离上下文、无 preload
+        partition: accountTabPartition(accountId),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    })
+
+    win.webContents.setUserAgent(chromeUa())
+    installExternalProtocolGuard(win.webContents, msg => logger.warn(msg))
+    // 辅助页同样是远程官方页：禁止它再开新窗口（否则会冒出壳层无法管理的原生窗口）
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // 兜底：辅助页的消费者（如 CompassListener）以 page.close() 销毁 target 结束使用，
+    // 若 webContents 先销毁而窗口未关，这里补关窗口——避免不可见的隐藏窗口长期残留占资源。
+    win.webContents.once('destroyed', () => {
+      if (!win.isDestroyed()) win.close()
+    })
+    win.once('closed', () => {
+      this.windows.delete(win.id)
+      logger.info('辅助页窗口已关闭', win.id)
+    })
+
+    this.windows.set(win.id, win)
+    // 与壳窗口同规程（P0-2）：先 about:blank#nonce 标记页，寻址成功后由调用方 goto 目标 URL
+    win.loadURL(`about:blank#${nonce}`).catch(err => logger.error('辅助页 nonce 页加载失败：', err))
+
+    return {
+      nonce,
+      windowId: win.id,
+      disposeWindow: async () => {
+        const w = this.windows.get(win.id)
+        this.windows.delete(win.id)
+        if (w && !w.isDestroyed()) w.close()
+      },
+    }
+  }
+
   get(windowId: number): BrowserWindow | undefined {
     return this.windows.get(windowId)
   }

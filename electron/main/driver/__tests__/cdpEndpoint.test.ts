@@ -76,4 +76,28 @@ describe('resolveCdpEndpoint（TC-U7 ~ TC-U8）', () => {
     expect(r.ok).toBe(false)
     expect(r.reason).toBe('port-file-unreadable')
   })
+
+  // P1 缺陷回归：harness/调试脚本约定 LM_CDP_PORT=0 表示「未指定 → 随机端口」，
+  // 真实端口由 Chromium 写入 DevToolsActivePort；若把 '0' 判非法，attach 会静默降级 launch。
+  it("TC-U8f [LM_CDP_PORT='0' 视为未指定] 走端口文件分支读随机端口", () => {
+    const r = resolveCdpEndpoint(ctx({ envPort: '0', file: '57571\n/devtools/browser/93dc-abc\n' }))
+    expect(r).toMatchObject({ ok: true, port: 57571 })
+    expect(r.wsEndpoint).toBe('http://127.0.0.1:57571')
+  })
+
+  it("TC-U8g [LM_CDP_PORT='0' 且无端口文件] 归约为 port-file-missing 而非 port-invalid", () => {
+    const r = resolveCdpEndpoint(ctx({ envPort: '0', file: null }))
+    expect(r).toMatchObject({ ok: false, reason: 'port-file-missing' })
+  })
+
+  it("TC-U8h [其它非法值仍归约 port-invalid] 只有 '0' 被特判为未指定", () => {
+    expect(resolveCdpEndpoint(ctx({ envPort: 'abc', file: null }))).toMatchObject({
+      ok: false,
+      reason: 'port-invalid',
+    })
+    expect(resolveCdpEndpoint(ctx({ envPort: '99999999', file: null }))).toMatchObject({
+      ok: false,
+      reason: 'port-invalid',
+    })
+  })
 })
