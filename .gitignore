@@ -59,3 +59,6 @@ tsconfig.node.tsbuildinfo
 
 # pnpm 本地 store（hook 环境自建，不入库）
 .pnpm-store/
+
+# Release 工作流生成的 notes（CI 产物，不提交）
+release-notes.md
