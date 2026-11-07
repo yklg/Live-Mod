@@ -216,7 +216,7 @@ export class AccountSession {
     // 读链路：仅抖音系平台（消息类型为 DouyinLiveMessage）；其他平台保持平台监听器
     if (
       typeof backend.subscribe === 'function' &&
-      ['douyin', 'buyin'].includes(this.platform.platformName)
+      ['抖音小店', '巨量百应', 'douyin', 'buyin'].includes(this.platform.platformName)
     ) {
       ports.source = {
         subscribe: onComment =>
