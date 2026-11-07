@@ -6,6 +6,8 @@
 // - partition：account=`persist:lm-shell-{id}`、free=`persist:lm-shell-browser`（登录态隔离契约 TC-T8）。
 // - 事件聚合：did-navigate/page-title-updated/did-start-loading/did-stop-loading 微任务合并一次推送（TC-T10）。
 // - 失效自愈：view 外部销毁 → state 过滤、active 迁移、操作不裸抛（TC-T9，S7 同构）。
+// - 焦点契约（v2）：create(前台)/activateTab 在可见性切换后调用 view.focus()；close/migrate 不抢焦点；
+//   焦点失败经 deps.onFocusError 上报、不阻断激活。非激活 Tab 仍可自动化（保活不变量，E2E 固化）。
 
 export interface TabView {
   webContents: {
@@ -16,6 +18,8 @@ export interface TabView {
     isDestroyed: () => boolean
     canGoBack: () => boolean
     canGoForward: () => boolean
+    /** 仅供焦点契约判定：页面 webContents 当前是否持有键盘焦点 */
+    isFocused: () => boolean
     loadURL: (u: string) => Promise<void>
     goBack: () => void
     goForward: () => void
@@ -26,6 +30,11 @@ export interface TabView {
   }
   setVisible: (v: boolean) => void
   setBounds: (b: { x: number; y: number; width: number; height: number }) => void
+  /**
+   * 键盘焦点接管（v2 焦点契约）：激活路径在可见性应用后调用。
+   * 契约：**不得抛错**（实现方内部守卫已销毁/异常），失败只允许经 deps.onFocusError 上报。
+   */
+  focus: () => void
 }
 
 export type TabKind = 'account' | 'free' | 'popup'
@@ -63,15 +72,19 @@ export interface ShellTabManagerDeps {
    *  否则新 Tab 的 view 停留在 0×0，直到下一次窗口 resize 才可见（登录页开在壳内却看不见）。
    *  必填而非可选：漏注入会静默退回 0×0 布局，交由编译期拦截（评审 P2 硬化）。 */
   requestLayout: () => void
+  /** 焦点接管失败上报（可选）：焦点是增强能力，失败不得阻断 Tab 激活/可见性切换 */
+  onFocusError?: (error: unknown) => void
 }
 
 export interface ShellTabManager {
   createTab(opts?: { url?: string; accountId?: string; popupOrigins?: readonly string[] }): number
   /**
-   * 浏览器语义弹窗承载（fix-shell-popup-navigation-liveend · Phase 2 · A1）：
+   * 浏览器语义弹窗承载（fix-shell-popup-navigation-liveend · Phase 2 · v2）：
    * 官方页 window.open 的「新上下文」意图由壳层新 Tab 表达——独立 Tab、复用 opener 的 partition
-   * （登录态一致）、不进入账号幂等映射。默认**后台打开**（不抢当前 Tab 的 active）：
-   * 任务/会话依赖中控台页保持前台运行，且用户可见新 Tab；需要浏览器式前台时显式传 activate:true。
+   * （登录态一致）、不进入账号幂等映射。
+   * 激活语义（v2 焦点契约）：默认 **activate:true = 前台激活并接管键盘焦点**；
+   * 调用方（shellUI）按「opener 是否为当前 active」传入显式值——后台页自发弹窗应传 false（防抢焦点）。
+   * 非激活 Tab 仍必须可被自动化操作（保活不变量，见 poc/shell/e2e-tab-liveness.mjs）。
    */
   createPopupTab(opts: {
     url: string
@@ -87,6 +100,11 @@ export interface ShellTabManager {
   reload(id: number): void
   tabIdForAccount(accountId: string): number | null
   webContentsIdOf(tabId: number): number
+  /**
+   * 当前 active Tab 的 webContents id；无 active/已销毁 → null（不抛错）。
+   * 消费方：shellUI 弹窗门控（openerActive 判定）与调试契约。
+   */
+  activeWebContentsId(): number | null
   /** 导航离开护栏/会话层查询用 */
   tabInfoOf(tabId: number): { kind: TabKind; accountId: string | null } | null
   hasActiveTab(): boolean
@@ -119,6 +137,8 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     kind: TabKind
     accountId: string | null
     view: TabView
+    /** 是否已挂载到容器（后台 Tab 延迟挂载：避免隐藏 view 夺走/清空键盘焦点） */
+    mounted: boolean
   }
   let seq = 0
   let activeId = 0
@@ -162,8 +182,27 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     if (active && alive(active)) return
     const next = tabs.find(t => alive(t))
     if (next) {
+      if (!next.mounted) {
+        deps.mount(next.view, 0)
+        next.mounted = true
+      }
       activeId = next.id
       applyVisibility()
+    }
+  }
+
+  /**
+   * 激活路径统一焦点接管（v2）：仅 create(前台)/activateTab 调用；
+   * close/migrate 刻意不调用（关闭 Tab 不得抢焦点）。
+   */
+  const focusActive = () => {
+    const t = tabs.find(tab => tab.id === activeId && alive(tab))
+    if (!t) return
+    try {
+      t.view.focus()
+    } catch (error) {
+      // 焦点是增强能力：失败不影响激活/可见性/几何，仅上报观测
+      deps.onFocusError?.(error)
     }
   }
 
@@ -193,6 +232,10 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     const kind: TabKind = opts.kind ?? (opts.accountId ? 'account' : 'free')
     const partition =
       opts.partition ?? (opts.accountId ? accountTabPartition(opts.accountId) : FREE_TAB_PARTITION)
+    // 焦点契约（v2）：后台打开可能因新建/隐藏 view 导致既有页面焦点丢失（实测评测为 null），
+    // 若打开前焦点在某个页面 Tab 上，创建后要把它还回去；焦点在面板/顶栏时不得抢占。
+    const focusWasInPageTab = tabs.some(t => alive(t) && t.view.webContents.isFocused())
+    const foreground = opts.activate !== false
     const view = deps.newView({
       kind,
       accountId: opts.accountId,
@@ -200,8 +243,11 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
       popupOrigins: opts.popupOrigins,
     })
     for (const ev of BRIDGE_EVENTS) view.webContents.on(ev, () => pushSoon())
-    deps.mount(view, 0) // 层级铁律：pageView 恒 index 0
-    tabs.push({ id, kind, accountId: opts.accountId ?? null, view })
+    // 后台打开：**延迟挂载**。实测「创建并隐藏隐藏 WebContentsView」会让既有页面焦点全部丢失
+    // 且无法恢复（isFocused 全 false）——后台 Tab 不挂载即可完全避免该副作用，用户切换到该 Tab 时再挂载。
+    const mountNow = foreground
+    if (mountNow) deps.mount(view, 0) // 层级铁律：pageView 恒 index 0
+    tabs.push({ id, kind, accountId: opts.accountId ?? null, view, mounted: mountNow })
     if (opts.accountId) accountIndex.set(opts.accountId, id)
     const prevActiveId = activeId
     activeId = id
@@ -212,6 +258,9 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     pushNow()
     // 新 Tab 的 view 刚 mount 时 bounds 为 0×0；必须立刻让布局层重排（几何仍由 panelController 唯一裁决）
     deps.requestLayout()
+    // 焦点契约（v2）：前台激活在可见性/几何就绪后接管键盘焦点；
+    // 后台打开不主动抢焦点，但若打开前焦点在页面 Tab 上，则恢复到 active 页（防焦点丢为 null）。
+    if (foreground || focusWasInPageTab) focusActive()
     return id
   }
 
@@ -222,7 +271,7 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     if (idx < 0) return // 幂等：未知/已关 id 空操作（TC-T4）
     const [t] = tabs.splice(idx, 1)
     if (t.accountId) accountIndex.delete(t.accountId)
-    deps.unmount(t.view)
+    if (t.mounted) deps.unmount(t.view)
     if (tabs.length === 0) {
       create({}) // 不变量：末位关闭重建空白，不退出
       return
@@ -245,17 +294,24 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
         kind: 'popup',
         partition: opts.partition,
         popupOrigins: opts.popupOrigins,
-        activate: opts.activate ?? false,
+        activate: opts.activate ?? true,
       })
     },
     closeTab: close,
     activateTab(id) {
       const t = find(id)
       if (!t || !alive(t) || t.id === activeId) return
+      if (!t.mounted) {
+        // 后台创建的 Tab 首次激活：此时才挂载，可见性/几何由下方 applyVisibility + requestLayout 统一裁决
+        deps.mount(t.view, 0)
+        t.mounted = true
+      }
       activeId = id
       applyVisibility()
       pushNow()
       deps.requestLayout()
+      // 显式切换 Tab = 用户意图；焦点随可见性进入新页面（浏览器一致）
+      focusActive()
     },
     async navigate(id, url) {
       const t = find(id)
@@ -284,6 +340,10 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
       const t = find(tabId)
       if (!t) throw new Error(`tab ${tabId} 不存在`)
       return t.view.webContents.id
+    },
+    activeWebContentsId() {
+      const t = tabs.find(tab => tab.id === activeId && alive(tab))
+      return t ? t.view.webContents.id : null
     },
     tabInfoOf(tabId) {
       const t = find(tabId)

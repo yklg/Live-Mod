@@ -29,6 +29,8 @@ type FakeWC = {
   destroyed: boolean
   canB: boolean
   canF: boolean
+  focused: boolean
+  isFocused: () => boolean
   getURL: () => string
   getTitle: () => string
   isLoading: () => boolean
@@ -46,6 +48,8 @@ type FakeWC = {
 
 function makeFakeView(id: number) {
   const handlers: Record<string, Array<(...a: unknown[]) => void>> = {}
+  /** 焦点契约（v2）观测序列：visible:* 与 focus 的调用顺序用于断言「先可见后聚焦」 */
+  const seq: string[] = []
   const wc: FakeWC = {
     id,
     url: 'about:blank',
@@ -54,12 +58,14 @@ function makeFakeView(id: number) {
     destroyed: false,
     canB: false,
     canF: false,
+    focused: false,
     getURL: () => wc.url,
     getTitle: () => wc.title,
     isLoading: () => wc.loading,
     isDestroyed: () => wc.destroyed,
     canGoBack: () => wc.canB,
     canGoForward: () => wc.canF,
+    isFocused: () => wc.focused,
     loadURL: vi.fn(async (u: string) => {
       wc.url = u
     }),
@@ -77,16 +83,23 @@ function makeFakeView(id: number) {
       handlers[ev] = (handlers[ev] || []).filter(f => f !== fn)
     },
   }
+  const setVisible = vi.fn((v: boolean) => {
+    seq.push(v ? 'visible:true' : 'visible:false')
+  })
+  const focus = vi.fn(() => {
+    seq.push('focus')
+  })
   const view: TabView = {
     webContents: wc as unknown as TabView['webContents'],
-    setVisible: vi.fn(),
+    setVisible,
     setBounds: vi.fn(),
+    focus,
   }
   const emit = (ev: string, ...args: unknown[]) => {
     const fns = (handlers[ev] || []).slice()
     for (const fn of fns) fn(...args)
   }
-  return { view, wc, emit }
+  return { view, wc, emit, seq, setVisible, focus }
 }
 
 function setup() {
@@ -110,6 +123,7 @@ function setup() {
   const mounts: Array<{ wcId: number; index: number }> = []
   const unmounts: number[] = []
   const pushes: TabsState[] = []
+  const focusErrors: unknown[] = []
   let layoutCalls = 0
   const manager = createShellTabManager({
     newView,
@@ -122,6 +136,7 @@ function setup() {
     requestLayout: () => {
       layoutCalls += 1
     },
+    onFocusError: e => focusErrors.push(e),
   })
   const flush = () => Promise.resolve().then(() => Promise.resolve())
   const lastState = () => pushes[pushes.length - 1]
@@ -143,6 +158,7 @@ function setup() {
     lastState,
     layoutCallsOf,
     fakeOf,
+    focusErrors,
   }
 }
 
@@ -369,26 +385,26 @@ describe('shellTabManager 弹窗 Tab（TC-T14~T16）', () => {
     )
   })
 
-  it('TC-T15 [后台打开] 默认不抢 active：当前 Tab 不变，popup view 不可见；activate:true 时前台', () => {
+  it('TC-T15 [前台打开·v2] 默认前台激活并接管焦点；显式 activate:false 才后台', () => {
     const f = setup()
     const accountTab = f.manager.createTab({ accountId: 'a1' })
-    const before = f.manager.state().activeId
     const popupTab = f.manager.createPopupTab({
       url: 'https://compass.jinritemai.com/x',
       partition: accountTabPartition('a1'),
     })
-    expect(before).toBe(accountTab)
-    expect(f.manager.state().activeId).toBe(accountTab) // 后台：不抢 active
-    expect(f.fakeOf(popupTab).view.setVisible).toHaveBeenLastCalledWith(false)
-    expect(f.fakeOf(accountTab).view.setVisible).toHaveBeenLastCalledWith(true)
+    expect(f.manager.state().activeId).toBe(popupTab) // v2：默认前台（浏览器语义）
+    expect(f.fakeOf(popupTab).view.setVisible).toHaveBeenLastCalledWith(true)
+    expect(f.fakeOf(accountTab).view.setVisible).toHaveBeenLastCalledWith(false)
+    expect(f.fakeOf(popupTab).focus).toHaveBeenCalledTimes(1) // 焦点契约
 
-    const front = f.manager.createPopupTab({
+    const back = f.manager.createPopupTab({
       url: 'https://compass.jinritemai.com/y',
       partition: accountTabPartition('a1'),
-      activate: true,
+      activate: false,
     })
-    expect(f.manager.state().activeId).toBe(front)
-    expect(f.fakeOf(accountTab).view.setVisible).toHaveBeenLastCalledWith(false)
+    expect(f.manager.state().activeId).toBe(popupTab) // 后台：不抢 active
+    expect(f.fakeOf(back).view.setVisible).toHaveBeenLastCalledWith(false)
+    expect(f.fakeOf(back).focus).not.toHaveBeenCalled()
   })
 
   it('TC-T16 [生命周期解耦] 关 popup 不影响账号映射/active；关账号不波及 popup 内容', () => {
@@ -410,5 +426,141 @@ describe('shellTabManager 弹窗 Tab（TC-T14~T16）', () => {
     expect(f.manager.state().tabs.some(t => t.id === popup2)).toBe(true)
     expect(f.manager.tabIdForAccount('a1')).toBeNull()
     expect(f.fakeOf(popup2).wc.destroyed).toBe(false)
+  })
+})
+
+// ===== v2 焦点契约 + activeWebContentsId（fix-shell-popup-navigation-liveend · v2）=====
+// 契约：
+// - 前台激活（create 默认 / activate:true）= 可见性切换后 focus 一次；
+// - 后台打开（activate:false）= 不碰焦点；
+// - activateTab = 可见性切换后 focus；重复激活/close/migrate 不抢焦点；
+// - focus 抛错不冒泡，经 onFocusError 上报（不影响激活）；
+// - activeWebContentsId 返回存活 active 的 wc id，无 active → null（不抛）。
+describe('shellTabManager 焦点契约（TC-T17~T20）', () => {
+  it('TC-T17 [顺序契约] create 前台：先 setVisible(true) 后 focus（不得倒序）', () => {
+    const f = setup()
+    f.manager.createTab({ accountId: 'a1' })
+    const popupTab = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/x',
+      partition: accountTabPartition('a1'),
+    })
+    const seq = f.fakeOf(popupTab).seq
+    expect(seq.indexOf('visible:true')).toBeGreaterThanOrEqual(0)
+    expect(seq.indexOf('focus')).toBeGreaterThan(seq.indexOf('visible:true'))
+  })
+
+  it('TC-T18 [activateTab 聚焦·存量修复] 显式切换后聚焦新 active；重复激活不重复聚焦', () => {
+    const f = setup()
+    const t1 = f.manager.createTab({})
+    const t2 = f.manager.createTab({})
+    // create 阶段也会聚焦（默认前台）；清空调用计数后只观察 activateTab 的行为
+    f.fakeOf(t1).focus.mockClear()
+    f.fakeOf(t2).focus.mockClear()
+    f.manager.activateTab(t1)
+    expect(f.fakeOf(t1).focus).toHaveBeenCalledTimes(1)
+    f.manager.activateTab(t1) // 已是 active：幂等，不重复聚焦
+    expect(f.fakeOf(t1).focus).toHaveBeenCalledTimes(1)
+    expect(f.fakeOf(t2).focus).not.toHaveBeenCalled()
+  })
+
+  it('TC-T19 [不抢焦点] close/migrate 不调用 focus', () => {
+    const f = setup()
+    const t1 = f.manager.createTab({})
+    const t2 = f.manager.createTab({})
+    const t1FocusBefore = f.fakeOf(t1).focus.mock.calls.length
+    const t2FocusBefore = f.fakeOf(t2).focus.mock.calls.length
+    f.manager.closeTab(t2) // 关 active → 迁移到 t1
+    expect(f.manager.state().activeId).toBe(t1)
+    expect(f.fakeOf(t1).focus.mock.calls.length).toBe(t1FocusBefore) // 迁移不抢焦点
+    expect(t2FocusBefore).toBeGreaterThanOrEqual(0)
+    // 外部销毁触发 state() 自愈迁移：同样不抢焦点
+    const t3 = f.manager.createTab({})
+    const t3FocusBefore = f.fakeOf(t3).focus.mock.calls.length
+    f.fakeOf(t3).wc.destroyed = true
+    f.manager.state()
+    expect(f.fakeOf(t1).focus.mock.calls.length).toBe(t1FocusBefore)
+    expect(t3FocusBefore).toBeGreaterThanOrEqual(0)
+  })
+
+  it('TC-T20 [失败不阻断] focus 抛错：create 不抛、激活态正常、错误经 onFocusError 上报', () => {
+    const f = setup()
+    f.manager.createTab({})
+    const popupTab = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/x',
+      partition: accountTabPartition('a1'),
+    })
+    f.fakeOf(popupTab).focus.mockImplementationOnce(() => {
+      throw new Error('focus-fail')
+    })
+    const next = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/z',
+      partition: accountTabPartition('a1'),
+    })
+    expect(() => f.manager.activateTab(popupTab)).not.toThrow()
+    expect(f.manager.state().activeId).toBe(popupTab)
+    expect(f.focusErrors.length).toBeGreaterThanOrEqual(1)
+    expect(next).toBeGreaterThan(popupTab)
+  })
+
+  it('TC-T21 [activeWebContentsId] 返回存活 active 的 wc id；无 active → null', () => {
+    const f = setup()
+    const t1 = f.manager.createTab({})
+    expect(f.manager.activeWebContentsId()).toBe(f.manager.webContentsIdOf(t1))
+    const t2 = f.manager.createTab({})
+    expect(f.manager.activeWebContentsId()).toBe(f.manager.webContentsIdOf(t2))
+    f.manager.closeTab(t2)
+    expect(f.manager.activeWebContentsId()).toBe(f.manager.webContentsIdOf(t1))
+    f.fakeOf(t1).wc.destroyed = true
+    expect(f.manager.activeWebContentsId()).toBeNull()
+  })
+
+  it('TC-T22 [后台打开不丢焦点] 打开前焦点在页面 Tab → 后台弹窗后焦点恢复到 active 页；焦点在面板时不抢', () => {
+    const f = setup()
+    const first = f.manager.createTab({})
+    // 场景 A：打开前焦点在页面 Tab（模拟用户正在中控台页面操作）
+    f.fakeOf(first).wc.focused = true
+    f.fakeOf(first).focus.mockClear()
+    const bg1 = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/x',
+      partition: accountTabPartition('a1'),
+      activate: false,
+    })
+    expect(f.manager.state().activeId).toBe(first) // 不抢 active
+    expect(f.fakeOf(bg1).focus).not.toHaveBeenCalled()
+    expect(f.fakeOf(first).focus).toHaveBeenCalledTimes(1) // 焦点还回 active 页（防丢为 null）
+
+    // 场景 B：打开前焦点不在页面（面板/顶栏输入）→ 后台弹窗不得抢焦点
+    f.fakeOf(first).wc.focused = false
+    f.fakeOf(first).focus.mockClear()
+    f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/y',
+      partition: accountTabPartition('a1'),
+      activate: false,
+    })
+    expect(f.fakeOf(first).focus).not.toHaveBeenCalled()
+  })
+
+  it('TC-T23 [后台延迟挂载] 后台弹窗不挂载；首次 activateTab 才挂载；未挂载关闭不 unmount', () => {
+    const f = setup()
+    f.manager.createTab({})
+    const mountsBefore = f.mounts.length
+    const bg = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/x',
+      partition: accountTabPartition('a1'),
+      activate: false,
+    })
+    const wcId = f.manager.webContentsIdOf(bg)
+    expect(f.mounts.length).toBe(mountsBefore) // 后台：不挂载（防隐藏 view 丢焦点）
+    f.manager.activateTab(bg)
+    expect(f.mounts.filter(m => m.wcId === wcId)).toHaveLength(1) // 激活时才挂载
+    // 另一个后台 Tab：未挂载直接关闭 → 不调用 unmount
+    const bg2 = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/y',
+      partition: accountTabPartition('a1'),
+      activate: false,
+    })
+    const wcId2 = f.manager.webContentsIdOf(bg2)
+    f.manager.closeTab(bg2)
+    expect(f.unmounts.filter(x => x === wcId2)).toHaveLength(0)
   })
 })

@@ -167,6 +167,9 @@ class BrowserSessionManager {
       logger.warn('stealth attach 掩蔽失败（F4 放行+标记）：', e)
     }
 
+    // 保活不变量（v2，契约以测试为准）：attach 会话存活期间，会话页在「Tab 非激活 / 窗口最小化 / 长驻」
+    // 下仍可被 Playwright 操作、页面定时器不被冻结——这是「用户切走页面后自动讲解仍生效」的前提。
+    // 契约回归：poc/shell/e2e-tab-liveness.mjs（非激活/最小化）；实现依据为 CDP attach 的 active lifecycle（实测）。
     logger.success('attach 会话建立成功，壳窗口：', handle.windowId)
     const session: BrowserSession = {
       kind: 'attached',

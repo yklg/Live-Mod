@@ -4,7 +4,8 @@
 
 ### 🚀 Features
 
-- 壳内弹窗改为浏览器语义：官方中控台页面 `window.open`/`target=_blank` 不再折叠替换当前页，统一由壳内**新 Tab** 承载（复用 opener 的账号 partition 保持登录态；默认后台打开，任务依赖的中控台 Tab 保持前台运行）；登录/进中控台等自动化窗口期由会话层显式声明同页折叠意图（`popupIntent`），登录完成即复位
+- 壳内弹窗改为浏览器语义：官方中控台页面 `window.open`/`target=_blank` 不再折叠替换当前页，统一由壳内**新 Tab** 承载（复用 opener 的账号 partition 保持登录态）；**opener 为当前 Tab 时新 Tab 自动前台并接管键盘焦点**，后台页自发弹窗保持后台不抢焦点（`popupAction` 门控）；后台 Tab **延迟挂载**避免隐藏 view 清空键盘焦点；登录/进中控台等自动化窗口期由会话层显式声明同页折叠意图（`popupIntent`），登录完成即复位
+- 自动化页面保活不变量（E2E 固化 `poc/shell/e2e-tab-liveness.mjs`）：会话页在**非激活 / 窗口最小化 / 长驻**下定时器不被冻结、Playwright click/fill/dispatch/scroll 仍可用——自动讲解在用户切走页面后继续生效；焦点契约（`TabView.focus`）仅前台激活/显式切 Tab 触发，close/migrate 不抢焦点
 - 评论监听健壮性：修复 `ControlListener.keepPageRunning` 死代码（`isRunning` 从未置 true，保活从未执行；修复后**只点「新评论」按钮**，不再通用点击 auxo 弹窗主按钮——避免误触真实配置弹窗、也不抢走下播判定专用的「直播总结」信号）；新增评论通道存活探针（连续 30s 无非空 `comment/info` 数据 → 日志 + toast 提示，不静默、不停止监听，60s 冷却；解析失败告警同样 60s 冷却防刷屏）；`CompassListener` 在壳内 attach 模式改用新的 `BrowserSession.createAuxPage`（隐藏窗口 + nonce 寻址），不再依赖 attach 下不可用的 `context.newPage()`，且失败路径回收 aux 载体并抛出原错误（不再静默丢弃 Promise）
 - 会话页身份观测：`AccountSession` 监听主 frame 导航，离开中控台且任务运行中时提示「中控台页面已离开，任务可能失效」（每段离开一次，回中控页复位）；平台层新增 `IPlatform.isControlPageUrl` 契约（域名知识仍在平台层），身份判据按**已知中控台路由白名单**匹配（`/ffa/content-tool/live/control`、`/ffa/buyin/dashboard/live/control`、`/dashboard/live/control`、`/livesite/live/current`），同站业务页/菜单漂移不再被误判为「仍在中控台」
 

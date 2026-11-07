@@ -40,7 +40,12 @@ import {
 import { preventPageInitiatedClose } from './pageCloseGuard'
 import { clampZoom, nextZoom, ZOOM_DEFAULT, ZOOM_STEP, zoomPercent, zoomStoreKey } from './pageZoom'
 import { createPanelController } from './panelController'
-import { clearPopupMode, getPopupMode } from './popupIntent'
+import {
+  type PendingPopupNav,
+  resolvePopupOpenAction,
+  shouldSuppressFallbackNavigation,
+} from './popupAction'
+import { clearPopupMode, getPopupMode, setPopupMode } from './popupIntent'
 import { classifyPopup } from './popupPolicy'
 import { computeEntryBounds, computeShellBounds } from './shellLayout'
 import { installShellMenu } from './shellMenu'
@@ -92,6 +97,7 @@ function makeTabWebContentsFacade(wc: WebContentsView['webContents']): TabView['
     isDestroyed: () => wc.isDestroyed(),
     canGoBack: () => nav?.canGoBack() ?? false,
     canGoForward: () => nav?.canGoForward() ?? false,
+    isFocused: () => wc.isFocused(),
     loadURL: u => wc.loadURL(u),
     goBack: () => wc.goBack(),
     goForward: () => wc.goForward(),
@@ -211,24 +217,17 @@ export function attachContainer(
       // fold 会劫持唯一的会话 Page，进而触发「误判下播 → 拆会话/Tab」（本次事故根因）。
       // 例外：会话层在登录/进中控台窗口期显式声明 popupMode='navigate'（见 popupIntent.ts），
       // 此时保留旧「同页折叠」语义（自动化反爬链路依赖），登录完成即复位。
-      const normUrl = (u: string) => {
-        try {
-          const x = new URL(u)
-          return `${x.origin}${x.pathname}${x.search}`
-        } catch {
-          return u
-        }
-      }
       // 兜底导航抑制（E8 实测）：官方页 `const w = window.open(url); if (!w) location.href = url`
       // 的兜底在 deny 下必然触发——新 Tab 已承载该 URL，必须拦截这次同页跳转，否则仍会劫持会话页。
-      let pendingPopupNav: { url: string; expiresAt: number } | null = null
+      // 判定收口到纯函数 popupAction.shouldSuppressFallbackNavigation（可单测），此处只做状态清理与副作用。
+      let pendingPopupNav: PendingPopupNav | null = null
       view.webContents.on('will-navigate', (event, targetUrl) => {
         if (!pendingPopupNav) return
         if (Date.now() > pendingPopupNav.expiresAt) {
           pendingPopupNav = null
           return
         }
-        if (normUrl(targetUrl) !== normUrl(pendingPopupNav.url)) return
+        if (!shouldSuppressFallbackNavigation(pendingPopupNav, targetUrl, Date.now())) return
         event.preventDefault()
         pendingPopupNav = null
         logger.info(
@@ -244,20 +243,25 @@ export function attachContainer(
           // 平台层注入的可信域名：跨域登录/中控页入壳内承载，而非外开系统浏览器
           ownedOrigins: opts.popupOrigins,
         })
-        if (decision === 'deny-selfdup') {
-          logger.info(
-            'popup-rule=deny-selfdup 拒绝自复制弹窗（反嵌入逃逸），页面留壳内：',
-            url.slice(0, 80),
-          )
+        // 门控输入：opener 是否为当前 active（纯决策函数 popupAction.resolvePopupOpenAction 消费）
+        const openerActive = tabManager
+          ? tabManager.activeWebContentsId() === view.webContents.id
+          : false
+        const action = resolvePopupOpenAction({
+          decision,
+          intentMode: getPopupMode(view.webContents.id),
+          openerActive,
+        })
+        if (action.kind === 'deny') {
+          logger.info(`popup-rule=${action.reason} 拒绝弹窗，页面留壳内：`, url.slice(0, 80))
           return { action: 'deny' }
         }
-        if (decision === 'external') {
+        if (action.kind === 'external') {
           logger.info('popup-rule=external 外链走系统浏览器：', url.slice(0, 80))
           if (url.startsWith('http')) void shell.openExternal(url)
           return { action: 'deny' }
         }
-        // decision === 'new-tab'
-        if (getPopupMode(view.webContents.id) === 'navigate') {
+        if (action.kind === 'navigate') {
           // 登录/进中控台窗口期：旧语义=同页折叠（自动化链路契约，见 popupIntent.ts）
           logger.info('popup-rule=intent-navigate 登录窗口期折叠当前页：', url.slice(0, 80))
           void foldNavigate({
@@ -268,6 +272,7 @@ export function attachContainer(
           })
           return { action: 'deny' }
         }
+        // action.kind === 'new-tab'
         if (!tabManager) {
           logger.warn('popup-rule=new-tab 壳容器未就绪，降级拒绝：', url.slice(0, 80))
           return { action: 'deny' }
@@ -276,14 +281,17 @@ export function attachContainer(
           url,
           partition: opts.partition,
           popupOrigins: opts.popupOrigins,
+          activate: action.activate,
         })
         pendingPopupNav = { url, expiresAt: Date.now() + 5000 }
         logger.info(
-          `popup-rule=new-tab 业务弹窗开壳内新 Tab（tab=${popupTabId}）：`,
+          `popup-rule=new-tab 业务弹窗开壳内新 Tab（tab=${popupTabId} activate=${action.activate} openerActive=${openerActive}）：`,
           url.slice(0, 80),
         )
-        // 后台打开不抢焦点，用户可能没注意到新 Tab —— 壳级通知轻提示（不阻塞操作）
-        pushNotice({ variant: 'info', description: '已在新标签页打开该页面' })
+        if (!action.activate) {
+          // 仅后台打开时提示（前台激活时用户直接看到新页面，不再提示减少噪音）
+          pushNotice({ variant: 'info', description: '已在新标签页打开该页面' })
+        }
         return { action: 'deny' }
       })
       // 一道防线足够：did-request-close 拒绝页面发起的 view 销毁（A0 实证 allow 弹窗才是死因，非 close）
@@ -293,6 +301,14 @@ export function attachContainer(
         webContents: makeTabWebContentsFacade(view.webContents),
         setVisible: v => view.setVisible(v),
         setBounds: b => view.setBounds(b),
+        // 焦点契约（v2）：不得抛错；已销毁/失败仅 verbose，激活流程不受影响
+        focus: () => {
+          try {
+            if (!view.webContents.isDestroyed()) view.webContents.focus()
+          } catch (error) {
+            logger.verbose('页面焦点接管失败（不打断激活）：', error)
+          }
+        },
       }
       return wrapper
     },
@@ -314,6 +330,8 @@ export function attachContainer(
     // E2E 实证：运行时新建 pageView 若不立即重排会停在 0×0——登录页已开在壳内 Tab 却不可见，
     // 直到下一次窗口 resize 才恢复（验收 V4 截图 "Cannot take screenshot with 0 width" 即此）。
     requestLayout: () => panel.resize(),
+    // 焦点失败上报（tabManager 兜底 catch）：仅观测，不影响激活
+    onFocusError: error => logger.warn('Tab 焦点接管失败（已忽略，不影响激活）：', error),
   })
 
   panel = createPanelController({
@@ -516,6 +534,19 @@ function registerShellDebug() {
         pending: noticeBus.pending.length,
         dropped: noticeBus.dropped,
       },
+      // v2 焦点契约验证契约（仅 LM_SHELL_DEBUG=1 暴露）：E2E 用它断言「新 Tab 自动获焦」
+      focusedWebContentsId: electronWebContents.getFocusedWebContents()?.id ?? null,
+      // 局部别名：TS 的窄化在回调闭包里会失效（tabManager 是模块级 let）
+      tabs: (() => {
+        const tm = tabManager
+        if (!tm) return []
+        return tm.state().tabs.map(t => ({
+          id: t.id,
+          wcId: tm.webContentsIdOf(t.id),
+          url: t.url,
+          active: t.active,
+        }))
+      })(),
       childrenUrls: container.contentView.children.map(c => {
         const v = c as unknown as WebContentsView
         return v.webContents?.getURL?.() ?? ''
@@ -525,5 +556,8 @@ function registerShellDebug() {
   const a = app as unknown as Record<string, unknown>
   a.__shellDebug = read
   a.__shellToggle = (routeId?: string | null) => panel.toggle(routeId ?? null)
+  // 测试契约（仅 LM_SHELL_DEBUG=1）：模拟会话层声明/复位弹窗意图，供 E2E 覆盖 intent-navigate 折叠路径
+  a.__shellPopupMode = (webContentsId: number, mode: 'navigate' | null) =>
+    setPopupMode(webContentsId, mode)
   logger.info('LM_SHELL_DEBUG=1：__shellDebug/__shellToggle 已注册')
 }
