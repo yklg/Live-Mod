@@ -3,6 +3,7 @@ import { setupAppIpcHandlers } from './app'
 import { setupAutoMessageIpcHandlers } from './autoMessage'
 import { setupAutoPopUpIpcHandlers } from './autoPopUp'
 import { setupBrowserIpcHandlers } from './browser'
+import { setupCommentBackendIpcHandlers } from './commentBackend'
 import { setupAutoReplyIpcHandlers } from './commentListener'
 import { setupLiveControlIpcHandlers } from './connection'
 import { setupPinCommentIpcHandler } from './pinComment'
@@ -21,3 +22,4 @@ setupUpdateIpcHandlers()
 setupPinCommentIpcHandler()
 setupRedPacketIpcHandlers()
 setupShellIpcHandlers()
+setupCommentBackendIpcHandlers()

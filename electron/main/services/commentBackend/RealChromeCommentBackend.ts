@@ -1,37 +1,20 @@
-// B2 评论后端：headless 真实 Chrome 承载官方 console 页，读取 comment/info 评论流。
-// 设计要点：
-//  - 载体是真实 Chrome（findChromium）+ stealth，不是 Electron 渲染进程 → 规避壳环境风控；
-//  - 登录态由调用方注入（壳 attach 会话的 cookies + localStorage 快照），backend 不读写壳 partition；
-//  - 纯依赖注入（launch/nav/log/clock），便于单测；解析逻辑在 parseCommentInfos（纯函数）。
-import type { BrowserSession } from '#/managers/BrowserSessionManager'
+// B2 评论后端：headless 真实 Chrome 承载官方中控台页，读取 comment/info 评论流。
+// 设计：真实 Chrome 引擎（非 Electron 渲染进程）→ 规避壳环境风控；登录态由会话层注入。
 import { createLogger } from '#/logger'
-import { createCommentDeduper, parseCommentInfos, type BackendComment } from './parseCommentInfos'
-
-export type CommentBackendState = 'idle' | 'starting' | 'live' | 'degraded' | 'stopped' | 'error'
-
-export interface CommentBackendStatus {
-  state: CommentBackendState
-  lastCommentAt?: number
-  comments: number
-  error?: string
-}
-
-export interface CommentBackendDeps {
-  /** 由会话层注入：启动 headless 真实 Chrome 并返回会话（page 需已带 storageState） */
-  createSession: () => Promise<BrowserSession>
-  /** 注入 console 页 URL（平台知识由调用方提供） */
-  consoleUrl: string
-  /** 评论回调（去重后） */
-  onComment?: (c: BackendComment) => void
-  onStatus?: (s: CommentBackendStatus) => void
-  now?: () => number
-}
+import type {
+  BackendComment,
+  CommentBackendDeps,
+  CommentBackendLike,
+  CommentBackendStatus,
+} from './contracts'
+import { createCommentDeduper, parseCommentInfos } from './parseCommentInfos'
+import { buildStorageState, isLoginUrl } from './storageState'
 
 const COMMENT_INFO_PATH = '/api/anchor/comment/info'
 
-export class RealChromeCommentBackend {
+export class RealChromeCommentBackend implements CommentBackendLike {
   private logger = createLogger('CommentBackend')
-  private session: BrowserSession | null = null
+  private session: { close: () => Promise<void> } | null = null
   private deduper = createCommentDeduper()
   private status: CommentBackendStatus = { state: 'idle', comments: 0 }
   private stopped = false
@@ -46,10 +29,12 @@ export class RealChromeCommentBackend {
     if (this.session) return this.getStatus()
     this.setStatus({ state: 'starting' })
     try {
-      const session = await this.deps.createSession()
-      this.session = session
+      const snapshot = await this.deps.getState()
+      const storageState = buildStorageState(snapshot, this.deps.consoleUrl)
+      const handle = await this.deps.createSession(storageState)
+      this.session = handle
       this.stopped = false
-      const page = session.page
+      const page = handle.page
       page.on('response', resp => {
         if (!resp.url().includes(COMMENT_INFO_PATH)) return
         void resp
@@ -59,6 +44,10 @@ export class RealChromeCommentBackend {
       })
       page.on('crash', () => this.setStatus({ state: 'degraded', error: 'backend page crash' }))
       await page.goto(this.deps.consoleUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+      if (isLoginUrl(page.url())) {
+        this.setStatus({ state: 'degraded', error: '登录态失效（后端页落在登录/SSO）' })
+        return this.getStatus()
+      }
       this.setStatus({ state: 'live' })
       this.logger.success('B2 评论后端已启动（headless 真实 Chrome）')
       return this.getStatus()
@@ -72,11 +61,12 @@ export class RealChromeCommentBackend {
   }
 
   async stop(): Promise<void> {
+    if (this.stopped && !this.session) return
     this.stopped = true
     const session = this.session
     this.session = null
     this.setStatus({ state: 'stopped' })
-    if (session) await session.browser.close().catch(() => {})
+    if (session) await session.close().catch(() => {})
   }
 
   /** 单轮评论响应处理（测试可直接调用） */
@@ -89,7 +79,7 @@ export class RealChromeCommentBackend {
     this.setStatus({ state: 'live', lastCommentAt: now })
     for (const c of fresh) {
       this.logger.info(`B2 评论：${c.nickName}：${c.content.slice(0, 60)}`)
-      this.deps.onComment?.(c)
+      this.deps.onComment?.(c as BackendComment)
     }
   }
 

@@ -67,6 +67,32 @@ export interface IpcChannels {
     accountId: string
   }) => void
 
+  // CommentBackend（B2 阅读链路：headless 真实 Chrome → 壳内直播互动面板）
+  [IPC_CHANNELS.tasks.commentBackend.status]: (payload: {
+    accountId: string
+    status: {
+      state: 'idle' | 'starting' | 'live' | 'degraded' | 'stopped' | 'error'
+      comments: number
+      lastCommentAt?: number
+      error?: string
+    }
+  }) => void
+  [IPC_CHANNELS.tasks.commentBackend.comment]: (payload: {
+    accountId: string
+    comment: { id: string; nickName: string; content: string; at: number }
+  }) => void
+  [IPC_CHANNELS.tasks.commentBackend.getState]: () => {
+    accounts: {
+      accountId: string
+      status: {
+        state: 'idle' | 'starting' | 'live' | 'degraded' | 'stopped' | 'error'
+        comments: number
+        lastCommentAt?: number
+        error?: string
+      }
+    }[]
+  }
+
   // AIChat
   [IPC_CHANNELS.tasks.aiChat.normalChat]: (params: {
     messages: AIChatMessage[]

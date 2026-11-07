@@ -237,7 +237,7 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     }
   })
 
-  it('TC-CQ4 [路由清单] ShellRail 路由 = 计划 §3 的 8 条（含自动回复设置）', () => {
+  it('TC-CQ4 [路由清单] ShellRail 路由 = 计划 §3 的 9 条（含自动回复设置/直播互动）', () => {
     const src = readIfExists('src/shell/ShellRail.tsx') ?? ''
     const routes = [...src.matchAll(/<Route path="([^"]+)"/g)].map(m => m[1]).sort()
     expect(routes).toEqual(
@@ -248,6 +248,7 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
         '/auto-popup',
         '/auto-reply',
         '/auto-reply/settings',
+        '/live-interaction',
         '/red-packet',
         '/settings',
       ].sort(),

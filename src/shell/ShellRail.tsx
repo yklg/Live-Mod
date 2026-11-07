@@ -8,6 +8,7 @@ import {
   Gift,
   HelpCircle,
   Megaphone,
+  MessageCircle,
   MessagesSquare,
   Settings,
   Sparkles,
@@ -27,6 +28,7 @@ import AutoPopUp from '@/pages/AutoPopUp'
 import AutoReply from '@/pages/AutoReply'
 import AutoReplySettings from '@/pages/AutoReply/AutoReplySettings'
 import LiveControl from '@/pages/LiveControl'
+import LiveInteraction from '@/pages/LiveInteraction'
 import RedPacket from '@/pages/RedPacket'
 import SettingsPage from '@/pages/SettingsPage'
 
@@ -45,6 +47,7 @@ const ITEMS: RailItem[] = [
   { id: 'popup', icon: Gift, label: '自动弹窗', path: '/auto-popup' },
   { id: 'msg', icon: Megaphone, label: '自动发言', path: '/auto-message' },
   { id: 'reply', icon: MessagesSquare, label: '自动回复', path: '/auto-reply' },
+  { id: 'interaction', icon: MessageCircle, label: '直播互动', path: '/live-interaction' },
   { id: 'ai', icon: Sparkles, label: 'AI 助手', path: '/ai-chat' },
   { id: 'set', icon: Settings, label: '账号/设置', path: '/settings' },
   { id: 'help', icon: HelpCircle, label: '帮助', external: true },
@@ -125,6 +128,7 @@ function ShellRailLayout({ rail }: { rail: ShellRailState }) {
               <Route path="/auto-message" element={<AutoMessage />} />
               <Route path="/auto-reply" element={<AutoReply />} />
               <Route path="/auto-reply/settings" element={<AutoReplySettings />} />
+              <Route path="/live-interaction" element={<LiveInteraction />} />
               <Route path="/ai-chat" element={<AIChat />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/red-packet" element={<RedPacket />} />

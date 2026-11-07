@@ -17,7 +17,8 @@ import { RealChromeCommentBackend } from '#/services/commentBackend/RealChromeCo
 
 // 批 A：后端单轮响应处理契约（handleBody，不依赖 Electron/Playwright）
 // fixture 为按真实 comment/info 响应结构脱敏合成的样本（非抓包原文）
-const body = (infos: unknown[]) => JSON.stringify({ st: 0, code: 0, data: { comment_infos: infos } })
+const body = (infos: unknown[]) =>
+  JSON.stringify({ st: 0, code: 0, data: { comment_infos: infos } })
 const fixture1 = body([
   { comment_id: '77053', nick_name: '用户A', content: '多大的好吃？', create_time: 1794050000 },
   { comment_id: '77054', nick_name: '用户B', content: '甜不甜', create_time: 1794050001 },
@@ -34,6 +35,7 @@ function makeBackend() {
     createSession: async () => {
       throw new Error('not used in handleBody tests')
     },
+    getState: async () => ({ cookies: [], localStorage: {} }),
     consoleUrl: 'about:blank',
     onComment,
     onStatus,

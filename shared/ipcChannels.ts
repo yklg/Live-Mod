@@ -39,6 +39,12 @@ export const IPC_CHANNELS = {
       replyGenerated: 'tasks:autoReply:replyGenerated',
       sendReply: 'tasks:autoReply:sendReply',
     },
+    // B2 评论后端（真实 Chrome 读取链路 → 壳内直播互动面板）
+    commentBackend: {
+      status: 'tasks:commentBackend:status',
+      comment: 'tasks:commentBackend:comment',
+      getState: 'tasks:commentBackend:getState',
+    },
     // 视频号上墙
     pinComment: 'tasks:pinComment',
     // 一键发红包

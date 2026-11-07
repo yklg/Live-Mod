@@ -1,5 +1,5 @@
 import { Result } from '@praha/byethrow'
-import { Notification } from 'electron'
+import { Notification, session } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { teardownSession } from '#/driver/types'
 import { TaskNotSupportedError } from '#/errors/AppError'
@@ -21,6 +21,7 @@ import {
   isPinComment,
   isSendRedPacket,
 } from '#/platforms/IPlatform'
+import { commentBackendRegistry } from '#/services/commentBackend/registry'
 import { createAutoCommentTask } from '#/tasks/AutoCommentTask'
 import { createAutoPopupTask } from '#/tasks/AutoPopupTask'
 import { createCommentListenerTask } from '#/tasks/CommentListenerTask'
@@ -28,6 +29,7 @@ import type { ITask } from '#/tasks/ITask'
 import { createPinCommentTask } from '#/tasks/PinCommentTask'
 import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import windowManager from '#/windowManager'
+import { accountTabPartition } from '#/windows/shellTabManager'
 
 export class AccountSession {
   private platform: IPlatform
@@ -132,7 +134,72 @@ export class AccountSession {
       this.platform.startLiveStatusWatch(() => this.handleLiveEnded())
     }
 
+    // B2：attach 壳会话评论读取链路走 headless 真实 Chrome（失败不影响主流程）
+    this.maybeStartCommentBackend()
+
     this.logger.success('成功与中控台建立连接')
+  }
+
+  /**
+   * B2 评论后端启动（仅壳 attach 模式；launched 模式官方页评论本身可用，不重复启动）。
+   * 读取链路：headless 真 Chrome 轮询 comment/info → 事件推送到壳内「直播互动」面板。
+   * 失败只降级告警，绝不影响连接/任务主流程。
+   */
+  private maybeStartCommentBackend(): void {
+    try {
+      if (process.env.LM_COMMENT_BACKEND === '0') return
+      const attached = this.browserSession
+      if (!attached || attached.kind !== 'attached') return
+      // 兼容测试/早期会话：page.url 不可用或非 http(s) 时跳过（后端接入绝不阻断连接）
+      const pageUrl = (attached.page as { url?: () => string }).url
+      if (typeof pageUrl !== 'function') return
+      const consoleUrl = pageUrl.call(attached.page)
+      if (!consoleUrl || !/^https?:/.test(consoleUrl)) return
+      const accountId = this.account.id
+      const partition = accountTabPartition(accountId)
+      const pageRef = attached.page
+      const logger = this.logger
+      void commentBackendRegistry
+        .ensure(accountId, {
+          consoleUrl,
+          getState: async () => ({
+            cookies: await session.fromPartition(partition).cookies.get({}),
+            localStorage: await pageRef
+              .evaluate(() => {
+                const out: Record<string, string> = {}
+                for (let i = 0; i < localStorage.length; i++) {
+                  const key = localStorage.key(i)
+                  if (key) out[key] = localStorage.getItem(key) ?? ''
+                }
+                return out
+              })
+              .catch(() => ({})),
+          }),
+          createSession: async (storageState: string) => {
+            const launched = await browserManager.createSession(
+              true,
+              JSON.parse(storageState) as StorageState,
+            )
+            return {
+              page: launched.page,
+              close: async () => {
+                await launched.browser.close().catch(() => {})
+              },
+            }
+          },
+          onComment: comment =>
+            windowManager.send(IPC_CHANNELS.tasks.commentBackend.comment, { accountId, comment }),
+          onStatus: status =>
+            windowManager.send(IPC_CHANNELS.tasks.commentBackend.status, { accountId, status }),
+        })
+        .then(status => {
+          if (status.state === 'live') logger.success('B2 评论后端已连接（headless 真实 Chrome）')
+          else logger.warn('B2 评论后端未就绪：', status.error ?? status.state)
+        })
+        .catch(e => logger.warn('B2 评论后端启动失败（不影响主流程）：', String(e).slice(0, 200)))
+    } catch (e) {
+      this.logger.warn('B2 评论后端接入跳过：', String(e).slice(0, 200))
+    }
   }
 
   /**
@@ -219,6 +286,7 @@ export class AccountSession {
 
   disconnect() {
     this.liveEndedHandled = true
+    void commentBackendRegistry.stop(this.account.id).catch(() => {})
     if (isLiveStatusWatcher(this.platform)) {
       this.platform.stopLiveStatusWatch()
     }

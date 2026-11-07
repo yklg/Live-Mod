@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createCommentDeduper, parseCommentInfos } from '#/services/commentBackend/parseCommentInfos'
+import {
+  createCommentDeduper,
+  parseCommentInfos,
+} from '#/services/commentBackend/parseCommentInfos'
 
 // B2 评论后端解析契约（阶段 1）
 const body = (infos: unknown) => JSON.stringify({ st: 0, code: 0, data: { comment_infos: infos } })
@@ -10,7 +13,9 @@ describe('parseCommentInfos（TC-CB1~CB5）', () => {
       body([{ comment_id: 'c1', nick_name: 'A', content: ' 你好 ', create_time: 100 }]),
       999,
     )
-    expect(list).toEqual([{ id: 'c1', nickName: 'A', content: '你好', at: 100_000, raw: expect.any(Object) }])
+    expect(list).toEqual([
+      { id: 'c1', nickName: 'A', content: '你好', at: 100_000, raw: expect.any(Object) },
+    ])
   })
 
   it('TC-CB2 空响应体/空列表/非 JSON → []（不抛错）', () => {
