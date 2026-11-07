@@ -24,12 +24,18 @@ import {
 import { commentBackendRegistry } from '#/services/commentBackend/registry'
 import { createAutoCommentTask } from '#/tasks/AutoCommentTask'
 import { createAutoPopupTask } from '#/tasks/AutoPopupTask'
+import type { CommentSourceAdapter } from '#/tasks/CommentListenerTask'
 import { createCommentListenerTask } from '#/tasks/CommentListenerTask'
 import type { ITask } from '#/tasks/ITask'
 import { createPinCommentTask } from '#/tasks/PinCommentTask'
-import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
+import { type BatchCommentSender, createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import windowManager from '#/windowManager'
 import { accountTabPartition } from '#/windows/shellTabManager'
+
+interface CommentTaskPorts {
+  source?: CommentSourceAdapter
+  sender?: BatchCommentSender
+}
 
 export class AccountSession {
   private platform: IPlatform
@@ -202,6 +208,35 @@ export class AccountSession {
     }
   }
 
+  /** 任务层端口：读链路（source）/发送链路（sender）都走 B2 后端；无后端则返回空（回退旧 page 路径） */
+  private commentTaskPorts(): CommentTaskPorts {
+    const backend = commentBackendRegistry.get(this.account.id)
+    if (!backend) return {}
+    const ports: CommentTaskPorts = {}
+    // 读链路：仅抖音系平台（消息类型为 DouyinLiveMessage）；其他平台保持平台监听器
+    if (
+      typeof backend.subscribe === 'function' &&
+      ['douyin', 'buyin'].includes(this.platform.platformName)
+    ) {
+      ports.source = {
+        subscribe: onComment =>
+          backend.subscribe!(c =>
+            onComment({
+              msg_type: 'comment',
+              msg_id: c.id,
+              nick_name: c.nickName,
+              content: c.content,
+              time: c.at,
+            } as DouyinLiveMessage),
+          ),
+      }
+    }
+    if (typeof backend.sendReply === 'function') {
+      ports.sender = { sendReply: text => backend.sendReply!(text) }
+    }
+    return ports
+  }
+
   /**
    * 绑定「会话页是否仍在中控台」的导航观测（fix-shell-popup-navigation-liveend A2）。
    * - 幂等：同一 Page 只绑一次（WeakSet）；page 被替换后由调用方（connect/ensureAuthenticated/
@@ -354,7 +389,13 @@ export class AccountSession {
     if (this.pageOffControl) {
       this.warnLeaveControlPage(this.currentPageUrl())
     }
-    const newTask = makeTask(task, this.platform, this.account, this.logger)
+    const newTask = makeTask(
+      task,
+      this.platform,
+      this.account,
+      this.logger,
+      this.commentTaskPorts(),
+    )
     if (Result.isFailure(newTask)) {
       return newTask
     }
@@ -410,6 +451,7 @@ function makeTask<T extends LiveControlTask>(
   platform: IPlatform,
   account: Account,
   logger: ReturnType<typeof createLogger>,
+  ports: CommentTaskPorts = {},
 ): Result.Result<ITask, Error> {
   if (task.type === 'auto-popup' && isPerformPopup(platform)) {
     return createAutoPopupTask(platform, task.config, account, logger)
@@ -418,10 +460,10 @@ function makeTask<T extends LiveControlTask>(
     return createAutoCommentTask(platform, task.config, account, logger)
   }
   if (task.type === 'send-batch-messages' && isPerformComment(platform)) {
-    return createSendBatchMessageTask(platform, task.config, logger)
+    return createSendBatchMessageTask(platform, task.config, logger, ports.sender)
   }
   if (task.type === 'comment-listener' && isCommentListener(platform)) {
-    return createCommentListenerTask(platform, task.config, account, logger)
+    return createCommentListenerTask(platform, task.config, account, logger, ports.source)
   }
   if (task.type === 'pin-comment' && isPinComment(platform)) {
     return createPinCommentTask(platform, task.config.comment, account.id, logger)

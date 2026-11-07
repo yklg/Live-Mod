@@ -45,6 +45,9 @@ function formatTime(ms: number): string {
 export default function LiveInteraction() {
   const [comments, setComments] = useState<CommentItem[]>([])
   const [statuses, setStatuses] = useState<Record<string, BackendStatus>>({})
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   useEffect(() => {
     const offComment = window.ipcRenderer.on(IPC_CHANNELS.tasks.commentBackend.comment, payload => {
@@ -69,8 +72,31 @@ export default function LiveInteraction() {
   }, [])
 
   const statusList = Object.entries(statuses)
-  const current = statusList[0]?.[1]
+  const currentEntry = statusList[0]
+  const current = currentEntry?.[1]
   const total = current?.comments ?? 0
+  const accountId = currentEntry?.[0]
+  const canSend = Boolean(accountId) && current?.state === 'live' && !sending
+
+  async function handleSend() {
+    const content = text.trim()
+    if (!content || !accountId || sending) return
+    setSending(true)
+    setSendError(null)
+    try {
+      const result = await window.ipcRenderer.invoke(
+        IPC_CHANNELS.tasks.commentBackend.send,
+        accountId,
+        content,
+      )
+      if (result.ok) setText('')
+      else setSendError(result.error ?? '发送失败')
+    } catch (e) {
+      setSendError(String(e).slice(0, 120))
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -112,11 +138,32 @@ export default function LiveInteraction() {
       </div>
 
       <div className="border-t border-border p-3">
-        <input
-          className="h-9 w-full cursor-not-allowed rounded-md border border-input bg-muted/40 px-3 text-sm"
-          placeholder="发送能力将在 Stage 3 接入…"
-          disabled
-        />
+        <div className="flex gap-2">
+          <input
+            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-primary disabled:cursor-not-allowed disabled:bg-muted/40"
+            placeholder={
+              canSend ? '回复观众或直接发评，Enter 一键发送' : '评论后端未连接，暂不可发送'
+            }
+            value={text}
+            disabled={!canSend}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                void handleSend()
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="h-9 shrink-0 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canSend || text.trim().length === 0}
+            onClick={() => void handleSend()}
+          >
+            {sending ? '发送中…' : '发送'}
+          </button>
+        </div>
+        {sendError && <p className="mt-1.5 text-xs text-red-600">{sendError}</p>}
       </div>
     </div>
   )

@@ -5,6 +5,7 @@ export {
   type CommentBackendLike,
   type CommentBackendState,
   type CommentBackendStatus,
+  type CommentSendResult,
   type CommentStateSnapshot,
   toPageHandle,
 } from './contracts'

@@ -9,14 +9,22 @@ import { TaskStopReason } from './ITask'
 
 const TASK_NAME = '自动回复'
 
+/** B2 读链路适配：任务只依赖"订阅评论流"，不感知后端实现 */
+export interface CommentSourceAdapter {
+  subscribe: (onComment: (message: LiveMessage) => void) => () => void
+}
+
 export function createCommentListenerTask(
   platform: ICommentListener,
   config: CommentListenerConfig,
   account: Account,
   _logger: ScopedLogger,
+  source?: CommentSourceAdapter,
 ) {
   const logger = _logger.scope(TASK_NAME)
   let wsService: WebSocketService | null
+  let unsubscribeSource: (() => void) | null = null
+  let usingPlatformSource = false
 
   async function execute() {
     try {
@@ -28,8 +36,14 @@ export function createCommentListenerTask(
           wsService = null
         })
       }
-      await platform.startCommentListener(broadcastMessage, config.source)
-      logger.info('开始监听评论')
+      if (source) {
+        unsubscribeSource = source.subscribe(broadcastMessage)
+        logger.info('开始监听评论（B2 真实 Chrome 后端）')
+      } else {
+        await platform.startCommentListener(broadcastMessage, config.source)
+        usingPlatformSource = true
+        logger.info('开始监听评论')
+      }
     } catch (err) {
       // 失败了还要告诉渲染层关闭按钮
       windowManager.send(IPC_CHANNELS.tasks.autoReply.listenerStopped, account.id)
@@ -64,8 +78,13 @@ export function createCommentListenerTask(
     }
     if (cfg.source && config.source !== cfg.source) {
       config.source = cfg.source
-      platform.stopCommentListener()
-      platform.startCommentListener(broadcastMessage, cfg.source)
+      if (source) {
+        unsubscribeSource?.()
+        unsubscribeSource = source.subscribe(broadcastMessage)
+      } else {
+        platform.stopCommentListener()
+        platform.startCommentListener(broadcastMessage, cfg.source)
+      }
     }
     return Result.succeed()
   }
@@ -80,7 +99,10 @@ export function createCommentListenerTask(
         await execute()
       },
       onStop: () => {
-        platform.stopCommentListener()
+        unsubscribeSource?.()
+        unsubscribeSource = null
+        if (usingPlatformSource) platform.stopCommentListener()
+        usingPlatformSource = false
         wsService?.stop()
         wsService = null
       },

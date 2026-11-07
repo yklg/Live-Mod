@@ -44,6 +44,7 @@ export const IPC_CHANNELS = {
       status: 'tasks:commentBackend:status',
       comment: 'tasks:commentBackend:comment',
       getState: 'tasks:commentBackend:getState',
+      send: 'tasks:commentBackend:send',
     },
     // 视频号上墙
     pinComment: 'tasks:pinComment',

@@ -81,6 +81,10 @@ export interface IpcChannels {
     accountId: string
     comment: { id: string; nickName: string; content: string; at: number }
   }) => void
+  [IPC_CHANNELS.tasks.commentBackend.send]: (
+    accountId: string,
+    content: string,
+  ) => { ok: boolean; error?: string }
   [IPC_CHANNELS.tasks.commentBackend.getState]: () => {
     accounts: {
       accountId: string

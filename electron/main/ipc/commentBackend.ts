@@ -17,4 +17,11 @@ export function setupCommentBackendIpcHandlers(): void {
     assertRailSender(event)
     return { accounts: commentBackendRegistry.list() }
   })
+
+  typedIpcMainHandle(IPC_CHANNELS.tasks.commentBackend.send, (event, accountId, content) => {
+    assertRailSender(event)
+    const backend = commentBackendRegistry.get(accountId)
+    if (!backend?.sendReply) return { ok: false, error: '评论后端未连接' }
+    return backend.sendReply(content)
+  })
 }

@@ -46,11 +46,21 @@ export interface CommentBackendDeps {
   now?: () => number
 }
 
-/** 窄接口供 registry 持有（便于单测 fake） */
+/** 发送结果（自动回复闭环用；失败原因透出给 UI/日志） */
+export interface CommentSendResult {
+  ok: boolean
+  error?: string
+}
+
+/** 窄接口供 registry 持有（便于单测 fake；subscribe/sendReply 可选以保持向后兼容） */
 export interface CommentBackendLike {
   start: () => Promise<CommentBackendStatus>
   stop: () => Promise<void>
   getStatus: () => CommentBackendStatus
+  /** 订阅评论流（任务层读链路用）；返回取消订阅 */
+  subscribe?: (listener: (c: BackendComment) => void) => () => void
+  /** 发送评论/回复（自动回复发送链路用） */
+  sendReply?: (text: string) => Promise<CommentSendResult>
 }
 
 /** 会话层适配：BrowserSession → BackendPageHandle */
