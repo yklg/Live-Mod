@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.8.0
+
 ### 🚀 Features
 
 - 壳内弹窗改为浏览器语义：官方中控台页面 `window.open`/`target=_blank` 不再折叠替换当前页，统一由壳内**新 Tab** 承载（复用 opener 的账号 partition 保持登录态）；**opener 为当前 Tab 时新 Tab 自动前台并接管键盘焦点**，后台页自发弹窗保持后台不抢焦点（`popupAction` 门控）；后台 Tab **延迟挂载**避免隐藏 view 清空键盘焦点；登录/进中控台等自动化窗口期由会话层显式声明同页折叠意图（`popupIntent`），登录完成即复位
