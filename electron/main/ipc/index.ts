@@ -11,6 +11,8 @@ import { setupRedPacketIpcHandlers } from './redPacket'
 import { setupShellIpcHandlers } from './shell'
 import { setupUpdateIpcHandlers } from './update'
 
+// 默认判定器在 app.ts 装配层注册（见 urlTrustResolver 注释：判定逻辑不进 ipc/ 目录）
+
 setupLiveControlIpcHandlers()
 setupAIChatIpcHandlers()
 setupAutoPopUpIpcHandlers()

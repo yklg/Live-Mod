@@ -74,6 +74,8 @@ export interface IpcChannels {
       state: 'idle' | 'starting' | 'live' | 'degraded' | 'stopped' | 'error'
       comments: number
       lastCommentAt?: number
+      lastFreshAt?: number
+      degradedReason?: 'no-data' | 'poll-miss'
       error?: string
     }
   }) => void
@@ -92,9 +94,21 @@ export interface IpcChannels {
         state: 'idle' | 'starting' | 'live' | 'degraded' | 'stopped' | 'error'
         comments: number
         lastCommentAt?: number
+        lastFreshAt?: number
+        degradedReason?: 'no-data' | 'poll-miss'
         error?: string
       }
+      /** 最近历史（主进程 store 快照，按 at 升序，最多 100 条） */
+      comments: { id: string; nickName: string; content: string; at: number }[]
     }[]
+    /** 调试注入是否可用（LM_SHELL_DEBUG=1）；面板据此决定是否显示"注入测试评论"按钮 */
+    debug: boolean
+  }
+  /** 仅 LM_SHELL_DEBUG=1 注册；无真实直播时用于验收面板显示/回放 */
+  [IPC_CHANNELS.tasks.commentBackend.debugInject]: (text: string) => {
+    ok: boolean
+    accountId?: string
+    error?: string
   }
 
   // AIChat

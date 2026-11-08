@@ -7,6 +7,7 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { emitter } from './event/eventBus'
 import { updateManager } from './managers/UpdateManager'
 import { providerService } from './services/ProviderService'
+import { setTrustResolver, urlTrustResolver } from './utils/ipc'
 import windowManager from './windowManager'
 import './ipc'
 import { createLogger } from './logger'
@@ -144,13 +145,18 @@ async function createWindow() {
     win.show()
     // 更新检查改挂 panelView 首帧（容器自身 webContents 不加载内容，did-finish-load 不触发）
     updateManager.silentCheckForUpdate().catch(() => {})
-  } else if (VITE_DEV_SERVER_URL) {
-    // #298
-    win.loadURL(VITE_DEV_SERVER_URL)
-    // Open devTool if the app is not packaged
-    win.webContents.openDevTools()
   } else {
-    win.loadFile(indexHtml)
+    // 经典模式：显式登记 'ui' 目标。windowManager 已删除"回退到主窗口"的隐式行为（P0-3），
+    // 不登记的话所有业务推送都会被判为「目标未就绪」—— 关键事件只能靠待发队列兜 30s。
+    windowManager.setUITarget(win.webContents)
+    if (VITE_DEV_SERVER_URL) {
+      // #298
+      win.loadURL(VITE_DEV_SERVER_URL)
+      // Open devTool if the app is not packaged
+      win.webContents.openDevTools()
+    } else {
+      win.loadFile(indexHtml)
+    }
   }
 
   // 加载完成后检查更新（经典模式；壳容器模式见上方 panelView 分支）
@@ -174,6 +180,8 @@ async function createWindow() {
 
 app
   .whenReady()
+  // IPC 来源判定器（装配层职责）：壳模式稍后由 shellUI.attachContainer 覆盖为 id 精确版
+  .then(() => setTrustResolver(urlTrustResolver))
   .then(logStartupInfo)
   .then(() => providerService.initialize())
   .then(createWindow)

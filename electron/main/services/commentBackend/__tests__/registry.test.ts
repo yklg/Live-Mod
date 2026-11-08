@@ -89,3 +89,59 @@ describe('CommentBackendRegistry（TC-CB10~CB13）', () => {
     expect(registry.list()).toEqual([])
   })
 })
+
+// ===== 采集进程死亡后必须重建（实测故障：headless Chrome 被系统杀掉后进程静默消失，
+// 旧实例留在表里 → ensure 一直返回它 → 面板永远 0 条且无任何线索）=====
+describe('CommentBackendRegistry 死亡重建（TC-CB17）', () => {
+  it('TC-CB17 后端进程已死 → ensure 丢弃旧实例并重建（不再复用死实例）', async () => {
+    let alive = true
+    const deadStop = vi.fn(async () => {})
+    const dead = {
+      start: vi.fn(async () => ({ state: 'live' as const, comments: 0 })),
+      stop: deadStop,
+      getStatus: () => ({ state: 'live' as const, comments: 0 }),
+      isAlive: () => alive,
+    }
+    const fresh = fakeBackend()
+    const factory = vi.fn(() => (alive ? dead : fresh.backend))
+    const registry = new CommentBackendRegistry(factory)
+    const deps = {
+      consoleUrl: 'https://a.example',
+      getState: async () => ({ cookies: [], localStorage: {} }),
+      createSession: async () => {
+        throw new Error('noop')
+      },
+    }
+
+    await registry.ensure('acc1', deps)
+    expect(factory).toHaveBeenCalledTimes(1)
+
+    // 进程被杀 → 再次 ensure 必须重建，而不是复用死实例
+    alive = false
+    await registry.ensure('acc1', deps)
+
+    expect(factory).toHaveBeenCalledTimes(2)
+    expect(deadStop).toHaveBeenCalledTimes(1)
+    expect(registry.list().map(x => x.accountId)).toEqual(['acc1'])
+  })
+
+  it('TC-CB17b 存活的后端仍然幂等复用（不误重建）', async () => {
+    const { backend, start } = fakeBackend()
+    backend.isAlive = () => true
+    const factory = vi.fn(() => backend)
+    const registry = new CommentBackendRegistry(factory)
+    const deps = {
+      consoleUrl: 'https://a.example',
+      getState: async () => ({ cookies: [], localStorage: {} }),
+      createSession: async () => {
+        throw new Error('noop')
+      },
+    }
+
+    await registry.ensure('acc1', deps)
+    await registry.ensure('acc1', deps)
+
+    expect(factory).toHaveBeenCalledTimes(1)
+    expect(start).toHaveBeenCalledTimes(1)
+  })
+})

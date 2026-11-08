@@ -3,19 +3,14 @@
 import { MessageCircle, Radio } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-
-interface CommentItem {
-  id: string
-  nickName: string
-  content: string
-  at: number
-  accountId?: string
-}
+import { type CommentItem, mergeComments } from './LiveInteraction/lib/mergeComments'
 
 interface BackendStatus {
   state: 'idle' | 'starting' | 'live' | 'degraded' | 'stopped' | 'error'
   comments: number
   lastCommentAt?: number
+  lastFreshAt?: number
+  degradedReason?: 'no-data' | 'poll-miss'
   error?: string
 }
 
@@ -23,18 +18,18 @@ const STATE_TEXT: Record<BackendStatus['state'], string> = {
   idle: '未启动',
   starting: '连接中…',
   live: '已连接',
-  degraded: '降级',
+  degraded: '可能失效',
   stopped: '已停止',
   error: '异常',
 }
 
 const STATE_CLASS: Record<BackendStatus['state'], string> = {
   idle: 'bg-muted text-muted-foreground',
-  starting: 'bg-amber-100 text-amber-700',
-  live: 'bg-emerald-100 text-emerald-700',
-  degraded: 'bg-amber-100 text-amber-700',
+  starting: 'bg-warning/10 text-warning',
+  live: 'bg-success/10 text-success',
+  degraded: 'bg-warning/10 text-warning',
   stopped: 'bg-muted text-muted-foreground',
-  error: 'bg-red-100 text-red-700',
+  error: 'bg-destructive/10 text-destructive',
 }
 
 function formatTime(ms: number): string {
@@ -45,26 +40,42 @@ function formatTime(ms: number): string {
 export default function LiveInteraction() {
   const [comments, setComments] = useState<CommentItem[]>([])
   const [statuses, setStatuses] = useState<Record<string, BackendStatus>>({})
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
+  const [debugAvailable, setDebugAvailable] = useState(false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
 
   useEffect(() => {
+    // 时序铁律：**先注册监听，再取快照**。反过来会漏掉两者之间的推送；
+    // 重叠部分由 mergeComments 用 (accountId,id) 复合键消掉。
     const offComment = window.ipcRenderer.on(IPC_CHANNELS.tasks.commentBackend.comment, payload => {
       const item: CommentItem = { ...payload.comment, accountId: payload.accountId }
-      setComments(prev => (prev.some(c => c.id === item.id) ? prev : [...prev.slice(-199), item]))
+      setComments(prev => mergeComments(prev, [item]))
     })
     const offStatus = window.ipcRenderer.on(IPC_CHANNELS.tasks.commentBackend.status, payload => {
       setStatuses(prev => ({ ...prev, [payload.accountId]: payload.status }))
     })
+
     void window.ipcRenderer
       .invoke(IPC_CHANNELS.tasks.commentBackend.getState)
       .then(result => {
         const map: Record<string, BackendStatus> = {}
-        for (const entry of result.accounts) map[entry.accountId] = entry.status
+        const fromSnapshot: CommentItem[] = []
+        for (const entry of result.accounts) {
+          map[entry.accountId] = entry.status
+          for (const c of entry.comments) fromSnapshot.push({ ...c, accountId: entry.accountId })
+        }
         setStatuses(map)
+        if (fromSnapshot.length > 0) setComments(prev => mergeComments(prev, fromSnapshot))
+        setSnapshotError(null)
+        setDebugAvailable(result.debug === true)
       })
-      .catch(() => {})
+      .catch((e: unknown) => {
+        // 不再静默吞错：dev 下 IPC 门禁失败曾表现为"永远未连接"，无任何线索
+        setSnapshotError(String(e).slice(0, 160))
+      })
+
     return () => {
       offComment()
       offStatus()
@@ -77,6 +88,16 @@ export default function LiveInteraction() {
   const total = current?.comments ?? 0
   const accountId = currentEntry?.[0]
   const canSend = Boolean(accountId) && current?.state === 'live' && !sending
+
+  async function handleInject() {
+    try {
+      const r = await window.__lmCommentDebug?.inject('测试评论')
+      if (r && !r.ok) setSnapshotError(r.error ?? '注入失败')
+      else setSnapshotError(null)
+    } catch (e) {
+      setSnapshotError(String(e).slice(0, 160))
+    }
+  }
 
   async function handleSend() {
     const content = text.trim()
@@ -103,13 +124,35 @@ export default function LiveInteraction() {
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <MessageCircle className="size-4 text-muted-foreground" />
         <span className="text-sm font-medium">直播互动</span>
+        {snapshotError && (
+          <span className="max-w-72 truncate text-xs text-destructive" title={snapshotError}>
+            读取历史失败：{snapshotError}
+          </span>
+        )}
         <span
           className={`ml-auto rounded-full px-2 py-0.5 text-xs ${
             current ? STATE_CLASS[current.state] : 'bg-muted text-muted-foreground'
           }`}
+          title={
+            current?.state === 'degraded' && current.degradedReason === 'no-data'
+              ? `读链路超过 30 秒没有 comment/info 响应${
+                  current.lastFreshAt ? `（最近一次 ${formatTime(current.lastFreshAt)}）` : ''
+                }`
+              : undefined
+          }
         >
           {current ? STATE_TEXT[current.state] : '未连接'}
         </span>
+        {debugAvailable && (
+          <button
+            type="button"
+            onClick={handleInject}
+            className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+            title="仅调试模式可用：注入一条评论，用于验证面板显示与切走回放"
+          >
+            注入测试评论
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-xs text-muted-foreground">
@@ -163,7 +206,7 @@ export default function LiveInteraction() {
             {sending ? '发送中…' : '发送'}
           </button>
         </div>
-        {sendError && <p className="mt-1.5 text-xs text-red-600">{sendError}</p>}
+        {sendError && <p className="mt-1.5 text-xs text-destructive">{sendError}</p>}
       </div>
     </div>
   )

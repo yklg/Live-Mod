@@ -9,6 +9,8 @@ export interface ShellZoomControls {
   zoomIn: () => void
   zoomOut: () => void
   zoomReset: () => void
+  /** 显示/隐藏右侧业务面板（面板是 overlay，会盖住官方页面右侧的评论区） */
+  togglePanel: () => void
 }
 
 export function installShellMenu(controls: ShellZoomControls) {
@@ -21,6 +23,12 @@ export function installShellMenu(controls: ShellZoomControls) {
         { label: '放大', accelerator: 'CommandOrControl+Plus', click: controls.zoomIn },
         { label: '缩小', accelerator: 'CommandOrControl+-', click: controls.zoomOut },
         { label: '实际大小', accelerator: 'CommandOrControl+0', click: controls.zoomReset },
+        { type: 'separator' },
+        {
+          label: '显示/隐藏业务面板',
+          accelerator: 'CommandOrControl+\\',
+          click: controls.togglePanel,
+        },
         { type: 'separator' },
         { role: 'togglefullscreen', label: '全屏' },
         { type: 'separator' },

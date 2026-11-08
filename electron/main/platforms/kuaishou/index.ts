@@ -95,6 +95,12 @@ export class KuaishouPlatform
         }),
       )
     }
+    // 已在讲解中（「结束讲解」= 当前正在讲）→ **直接视为本轮就绪、不点击**：
+    // 旧实现会先点「结束讲解」再点「开始讲解」把讲解重启一次（无停顿的取消→重开），
+    // 与抖店/百应的修复保持一致；下一个商品由 AutoPopupTask 的队列在下一轮推进。
+    if (buttonText === '结束讲解') {
+      return Result.succeed()
+    }
     await button.value.dispatchEvent('click')
     // 判断是否会出现 modal
     const modalNextButton = await this.mainPage
@@ -105,27 +111,6 @@ export class KuaishouPlatform
     // 出现了就点击“确定”
     if (modalNextButton) {
       await modalNextButton.dispatchEvent('click')
-    }
-
-    // 结束讲解 - 需要再次开始讲解
-    if (buttonText === '结束讲解') {
-      // 为了以防万一等待一段时间
-      await sleep(100)
-      // 注意：此时无法使用原先的按钮，需要重新查找
-      const newButton = await elementFinder.getPopUpButtonFromGoodsItem(item.value)
-      if (Result.isFailure(newButton)) {
-        return newButton
-      }
-      const newButtonText = (await newButton.value.textContent())?.trim() ?? ''
-      if (newButtonText !== '开始讲解') {
-        return Result.fail(
-          new ElementContentMismatchedError({
-            current: newButtonText,
-            target: '开始讲解',
-          }),
-        )
-      }
-      newButton.value.dispatchEvent('click')
     }
     return Result.succeed()
   }

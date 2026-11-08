@@ -1,5 +1,6 @@
 import { Result } from '@praha/byethrow'
 import type { Page } from 'playwright'
+import { createLogger } from '#/logger'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import {
   comment,
@@ -69,12 +70,16 @@ export class DouyinEosPlatform implements IPlatform, IPerformPopup, IPerformComm
   }
 
   async performPopup(id: number, signal?: AbortSignal) {
+    // 已在讲解中 → toggleButton 直接成功（不点「取消讲解」打断），日志留痕；下一轮由任务队列推进
+    const logger = createLogger('自动讲解')
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => getItemFromVirtualScroller(page, elementFinder, id)),
       Result.andThen(item => elementFinder.getPopUpButtonFromGoodsItem(item)),
       Result.andThen(popupBtn =>
-        toggleButton(popupBtn, TEXTS.POPUP_BUTTON, TEXTS.POPUP_BUTTON_CANCLE, signal),
+        toggleButton(popupBtn, TEXTS.POPUP_BUTTON, TEXTS.POPUP_BUTTON_CANCLE, signal, {
+          onAlreadyAtTarget: () => logger.info(`商品 ${id} 已在讲解中，跳过本轮（等待下一轮）`),
+        }),
       ),
     )
   }

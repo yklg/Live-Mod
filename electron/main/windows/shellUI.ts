@@ -25,6 +25,7 @@ import {
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger } from '#/logger'
 import { loadZoomFactor, saveZoomFactor } from '#/services/ZoomStore'
+import { classifyViewUrl, setTrustResolver } from '#/utils/ipc'
 import windowManager from '#/windowManager'
 import { attachEntryView, destroyEntryView, getEntryDebug, relayoutEntryView } from './entryView'
 import { installExternalProtocolGuard } from './externalProtocolGuard'
@@ -168,6 +169,28 @@ function installZoomShortcuts(wc: Electron.WebContents) {
   })
 }
 
+/**
+ * Cmd/Ctrl + \ 快捷键：显示/隐藏业务面板。
+ *
+ * 为什么必须有（这不是锦上添花，是可读性硬伤）：
+ *   业务面板是 600px 的 **overlay**，浮在官方页面上方；而 pageView 的视口宽是 winW-56。
+ *   窗口 1280 时页面按 1224px 布局渲染，右侧 600px（x∈[680,1280]）被面板完全盖住 ——
+ *   抖店中控台的评论区/观众列表恰好就在页面右侧，于是**官方页面在渲染、评论也在渲染，但看不见**。
+ *
+ * 为什么用「收起面板」而不是「压缩页面宽度」：
+ *   压缩 pageView 会触发官方页面重排，抖店在窄视口下会自己折叠右侧栏 —— 评论区反而更看不到，
+ *   且重排可能打断正在进行的直播操作。overlay 语义（面板展开不改 page bounds）是刻意设计，
+ *   正确解法是给用户一个**一键让出右侧**的手段。
+ */
+function installPanelToggleShortcut(wc: Electron.WebContents) {
+  wc.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !(input.meta || input.control)) return
+    if (input.key !== '\\') return
+    event.preventDefault()
+    panel.toggle(null)
+  })
+}
+
 export function attachContainer(
   win: BrowserWindow,
   entry: { url?: string; file?: string },
@@ -188,11 +211,24 @@ export function attachContainer(
   const noticeWc = getNoticeWindowWebContents()
   if (noticeWc) windowManager.setTarget('notice', noticeWc)
   // 壳内任意视图聚焦时 Cmd/Ctrl +/-/0 都作用于当前活跃 Tab（地址栏/入口同样可用）
-  for (const wc of [chromeView.webContents, railView.webContents]) installZoomShortcuts(wc)
+  for (const wc of [chromeView.webContents, railView.webContents]) {
+    installZoomShortcuts(wc)
+    installPanelToggleShortcut(wc)
+  }
 
   // 业务推送目标 = railView（完整业务树，v3 的 panelView 语义迁移）；顶栏走具名 'chrome' 目标
   windowManager.setUITarget(railView.webContents)
   windowManager.setTarget('chrome', chromeView.webContents)
+
+  // IPC 来源判定：优先 webContents.id 精确比对（防 URL 伪造/视图重建后 id 变化），兜底走 URL。
+  // 与 ipc/index.ts 注册的 URL 版相比，这里多了"精确身份"，但**判据不是安全边界本身** ——
+  // 边界是 CHANNEL_TRUST 声明表 + 前置校验，本函数只负责回答"你是哪个视图"。
+  setTrustResolver(event => {
+    const id = event.sender.id
+    if (railView && id === railView.webContents.id) return 'rail'
+    if (chromeView && id === chromeView.webContents.id) return 'chrome'
+    return classifyViewUrl(event.sender.getURL())
+  })
 
   tabManager = createShellTabManager({
     newView: opts => {
@@ -209,6 +245,8 @@ export function attachContainer(
       // 官方页 JS 触发的 bytedance:// 等深链导航必须拦截（否则 macOS 系统弹窗打断壳内流程）
       installExternalProtocolGuard(view.webContents, msg => logger.warn(msg))
       installZoomShortcuts(view.webContents)
+      // 官方页面聚焦时也要能一键让出右侧（业务面板遮住评论区，见 installPanelToggleShortcut 注释）
+      installPanelToggleShortcut(view.webContents)
       // 导航完成恢复该站点记忆缩放（官方中控台默认 100% 会被窗口裁切）
       view.webContents.on('did-finish-load', () => applyStoredZoom(view.webContents))
       view.webContents.on('did-navigate', () => applyStoredZoom(view.webContents))
@@ -374,6 +412,7 @@ export function attachContainer(
     zoomIn: () => applyZoomStep(ZOOM_STEP),
     zoomOut: () => applyZoomStep(-ZOOM_STEP),
     zoomReset: applyZoomReset,
+    togglePanel: () => panel.toggle(null),
   })
 
   if (process.env.LM_SHELL_DEBUG === '1') registerShellDebug()

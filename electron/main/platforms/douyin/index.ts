@@ -110,12 +110,18 @@ export class DouyinPlatform
   }
 
   async performPopup(id: number, signal?: AbortSignal) {
+    // 自动讲解语义（对齐运营预期）：商品**已经在讲解中**时不再先取消再重开，
+    // 而是直接视为本轮就绪 → 下一轮由 AutoPopupTask 的队列自然推进到下一个商品。
+    // 日志需要区分「点击成功」与「本来就在讲解」，因此用 hooks 回调打一条可诊断的 info。
+    const logger = createLogger('自动讲解')
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => getItemFromVirtualScroller(page, elementFinder, id)),
       Result.andThen(item => elementFinder.getPopUpButtonFromGoodsItem(item)),
       Result.andThen(popupBtn =>
-        toggleButton(popupBtn, TEXTS.POPUP_BUTTON, TEXTS.POPUP_BUTTON_CANCLE, signal),
+        toggleButton(popupBtn, TEXTS.POPUP_BUTTON, TEXTS.POPUP_BUTTON_CANCLE, signal, {
+          onAlreadyAtTarget: () => logger.info(`商品 ${id} 已在讲解中，跳过本轮（等待下一轮）`),
+        }),
       ),
     )
   }

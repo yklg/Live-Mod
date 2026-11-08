@@ -158,7 +158,10 @@ vi.mock('electron', () => ({ Notification: vi.fn(() => ({ show: vi.fn() })) }))
 
 vi.mock('#/windowManager', () => ({
   default: {
-    send: (channel: string, arg?: unknown) => h.sends.push({ channel, arg }),
+    send: (channel: string, arg?: unknown) => {
+      h.sends.push({ channel, arg })
+      return true
+    },
     sendTo: (target: string, channel: string, ...args: unknown[]) => {
       // 只记录告警 toast（'ui' 目标 = 业务树/railView）；保留通道以便断言确实走 shell.warnToast
       if (target === 'ui' && args[0]) h.toasts.push({ channel, message: String(args[0]) })

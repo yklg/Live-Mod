@@ -81,7 +81,10 @@ vi.mock('electron', () => ({ Notification: h.NotificationMock }))
 
 vi.mock('#/windowManager', () => ({
   default: {
-    send: (channel: string, arg?: unknown) => h.sends.push({ channel, arg }),
+    send: (channel: string, arg?: unknown) => {
+      h.sends.push({ channel, arg })
+      return true
+    },
   },
 }))
 

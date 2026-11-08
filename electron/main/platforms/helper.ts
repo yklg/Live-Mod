@@ -226,12 +226,23 @@ export async function getItemFromVirtualScroller(
   )
 }
 
+/**
+ * `toggleButton` 的观察者钩子（不改变行为，只用于让调用方区分两种成功）：
+ * - `onAlreadyAtTarget`：进入时按钮**本来就已经**是目标态（没有发生点击）。
+ * 为什么需要：自动讲解遇到「商品正在讲解」时应当**跳过**而不是先取消再重开，
+ * 调用方需要一条可诊断的日志来说明「这一轮没有点击」，否则日志里只有「讲解成功」。
+ */
+export interface ToggleButtonHooks {
+  onAlreadyAtTarget?: () => void
+}
+
 const TOGGLE_BUTTON_MAX_TRY_COUNT = 5
 export async function toggleButton(
   button: ElementHandle<SVGElement | HTMLElement>,
   sourceContent: string,
   targetContent: string,
   signal?: AbortSignal,
+  hooks?: ToggleButtonHooks,
   tryCount = 0,
 ): Result.ResultAsync<void, Error> {
   if (tryCount > TOGGLE_BUTTON_MAX_TRY_COUNT) {
@@ -252,10 +263,14 @@ export async function toggleButton(
     )
   }
 
-  // 两种情况：
-  // 1. 商品未讲解：buttonText === sourceContent，点击变为 targetContent 即可
-  // 2. 商品正在讲解：需要先点击一次取消讲解，变为未讲解状态
-  if (buttonText === targetContent && tryCount > 0) {
+  // 语义是「确保按钮处于目标状态」，不是字面意义的「翻转一次」：
+  // 1. **已在目标状态**（商品正在讲解，按钮显示「取消讲解」）→ 直接成功、**不点击**。
+  //    旧实现在 tryCount=0 时仍会点一次「取消讲解」，把正在讲解的商品先停掉再重开：
+  //    运营侧看到一次无停顿的「取消→讲解」来回，且页面按钮态未稳定时第二次点击可能丢失
+  //    （自动讲解本该「跳过本轮、进入下一轮」，而不是打断正在进行的讲解）。
+  // 2. 处于源状态（「讲解」）→ 点击一次，等 1s 复查；仍未变成目标态就继续点，最多 5 次。
+  if (buttonText === targetContent) {
+    if (tryCount === 0) hooks?.onAlreadyAtTarget?.()
     return Result.succeed()
   }
   if (await button.isDisabled()) {
@@ -270,7 +285,9 @@ export async function toggleButton(
   await button.dispatchEvent('click')
   return Result.pipe(
     abortableSleep(1000, signal),
-    Result.andThen(() => toggleButton(button, sourceContent, targetContent, signal, tryCount + 1)),
+    Result.andThen(() =>
+      toggleButton(button, sourceContent, targetContent, signal, hooks, tryCount + 1),
+    ),
   )
 }
 

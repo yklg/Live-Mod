@@ -62,3 +62,9 @@ tsconfig.node.tsbuildinfo
 
 # Release 工作流生成的 notes（CI 产物，不提交）
 release-notes.md
+
+# 本地调试产物（含凭据与浏览器 profile，绝不入库）
+.dsh-dev/
+.live-ops-dev/
+dsh-live-ops/
+.workbuddy/

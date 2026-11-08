@@ -26,8 +26,12 @@ const h = vi.hoisted(() => {
 vi.mock('#/logger', () => ({ createLogger: () => h.loggerStub }))
 vi.mock('#/windowManager', () => ({
   default: {
-    sendTo: (target: string, channel: string, message: string) =>
-      h.toastSends.push({ target, channel, message }),
+    // 返回值必须是 boolean（真实 WindowManager.sendTo 契约）：W3 起调用方会读返回值做失败计数，
+    // 返回 push() 的数字会让「投递失败判定」失去意义 —— 见 TC-RG1。
+    sendTo: (target: string, channel: string, message: string) => {
+      h.toastSends.push({ target, channel, message })
+      return true
+    },
   },
 }))
 

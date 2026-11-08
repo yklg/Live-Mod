@@ -1,5 +1,5 @@
 import { Pause, Play, RefreshCcw } from 'lucide-react'
-import { memo, useId, useMemo, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { useAutoReplyConfig } from '@/hooks/useAutoReplyConfig'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
+import { isShellPanelView } from '@/shell/lib/panelMode'
 
 const getMessageColor = (type: Message['msg_type']) => {
   switch (type) {
@@ -165,6 +166,18 @@ export default function CommentList({
       toast.error('停止监听评论失败')
     }
   }
+
+  // 壳内模式自动启动评论监听：B2 后端已随 connect() 启动，无需用户再点一次
+  // 经典模式保留手动语义（平台原生监听器启动成本高，用户知情）
+  const isShell = isShellPanelView()
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖刻意只保留 [isShell, isConnected] —— 自动启动只应在「壳内 + 连接建立」时发生一次；把 isListening/startListening 纳入依赖会让用户手动「停止监听」后被立刻自动重启（startListening 每次渲染都是新函数，纳入依赖等于每次渲染都重跑）
+  useEffect(() => {
+    if (!isShell) return
+    if (isConnected !== 'connected') return
+    if (isListening === 'listening' || isListening === 'waiting') return
+    // 壳内自动启动：B2 后端已就绪，CommentListenerTask 可立即用 B2 source
+    void startListening()
+  }, [isShell, isConnected])
 
   const accountName = useCurrentLiveControl(ctx => ctx.accountName)
 

@@ -37,7 +37,15 @@ export class CommentBackendRegistry {
 
   async ensure(accountId: string, deps: CommentBackendDeps): Promise<CommentBackendStatus> {
     const existing = this.backends.get(accountId)
-    if (existing) return existing.getStatus()
+    if (existing) {
+      // 采集进程已死（headless Chrome 被系统杀掉）→ 旧实例留着只会永远空白，必须重建
+      if (existing.isAlive && !existing.isAlive()) {
+        this.backends.delete(accountId)
+        await existing.stop().catch(() => {})
+      } else {
+        return existing.getStatus()
+      }
+    }
     if (this.backends.size >= this.maxAccounts) {
       throw new Error(`评论后端账号数已达上限（${this.maxAccounts}），拒绝启动 ${accountId}`)
     }

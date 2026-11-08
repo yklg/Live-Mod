@@ -8,7 +8,8 @@ import type {
   CommentBackendStatus,
   CommentSendResult,
 } from './contracts'
-import { createCommentDeduper, parseCommentInfos } from './parseCommentInfos'
+import { createCommentDeduper, isCommentInfoBody, parseCommentInfos } from './parseCommentInfos'
+import { createStaleWatcher, type StaleWatcher } from './staleWatcher'
 import { buildStorageState, isLoginUrl } from './storageState'
 
 const COMMENT_INFO_PATH = '/api/anchor/comment/info'
@@ -21,8 +22,36 @@ export class RealChromeCommentBackend implements CommentBackendLike {
   private deduper = createCommentDeduper()
   private status: CommentBackendStatus = { state: 'idle', comments: 0 }
   private stopped = false
+  /** 最近一次「结构合法响应」的时间（含空列表）：静默失效判定基线 */
+  private lastFreshAt?: number
+  /** 浏览器进程存活探针（缺失则视为存活，避免旧调用方被误判） */
+  private isConnected: () => boolean = () => true
+  private readonly staleWatcher: StaleWatcher
 
-  constructor(private deps: CommentBackendDeps) {}
+  constructor(private deps: CommentBackendDeps) {
+    this.staleWatcher = createStaleWatcher({
+      getLastFreshAt: () => this.lastFreshAt,
+      onStale: () => this.handleStale(),
+      // 进程死亡 5s 内可判（不必等满 30s 无数据阈值）
+      isAlive: () => this.isAlive(),
+      onExit: reason => this.handleExit(reason),
+      now: deps.now,
+    })
+  }
+
+  /** 存活探针：浏览器进程是否还在（headless Chrome 会被系统/OOM 静默杀掉） */
+  isAlive(): boolean {
+    if (this.stopped) return false
+    try {
+      return this.isConnected()
+    } catch {
+      return false
+    }
+  }
+
+  private now(): number {
+    return this.deps.now?.() ?? Date.now()
+  }
 
   getStatus(): CommentBackendStatus {
     return { ...this.status }
@@ -36,6 +65,7 @@ export class RealChromeCommentBackend implements CommentBackendLike {
       const storageState = buildStorageState(snapshot, this.deps.consoleUrl)
       const handle = await this.deps.createSession(storageState)
       this.session = handle
+      this.isConnected = handle.isConnected ?? (() => true)
       this.stopped = false
       const page = handle.page
       this.page = page
@@ -53,6 +83,9 @@ export class RealChromeCommentBackend implements CommentBackendLike {
         return this.getStatus()
       }
       this.setStatus({ state: 'live' })
+      // 失效检测基线：从这里开始计时，之后每收到一次结构合法响应就刷新
+      this.lastFreshAt = this.now()
+      this.staleWatcher.start()
       this.logger.success('B2 评论后端已启动（headless 真实 Chrome）')
       return this.getStatus()
     } catch (e) {
@@ -67,6 +100,7 @@ export class RealChromeCommentBackend implements CommentBackendLike {
   async stop(): Promise<void> {
     if (this.stopped && !this.session) return
     this.stopped = true
+    this.staleWatcher.stop()
     const session = this.session
     this.session = null
     this.page = null
@@ -136,16 +170,64 @@ export class RealChromeCommentBackend implements CommentBackendLike {
   /** 单轮评论响应处理（测试可直接调用） */
   handleBody(body: string): void {
     if (this.stopped) return
-    const now = this.deps.now?.() ?? Date.now()
+    // 结构不合法（空体/非 JSON/缺 comment_infos）不代表链路活着，不刷新基线
+    if (!isCommentInfoBody(body)) return
+
+    const now = this.now()
+    // 关键：合法响应即刷新基线 —— 哪怕本轮 0 条新评论（直播没人说话 ≠ 链路断了）
+    this.lastFreshAt = now
+    this.staleWatcher.reset()
+
     const fresh = this.deduper.take(parseCommentInfos(body, now))
-    if (!fresh.length) return
+    if (!fresh.length) {
+      // 降级后收到任何合法响应即认定链路恢复
+      if (this.status.state === 'degraded') {
+        this.setStatus({ state: 'live', degradedReason: undefined })
+      }
+      return
+    }
+
     this.status.comments += fresh.length
-    this.setStatus({ state: 'live', lastCommentAt: now })
+    this.setStatus({ state: 'live', lastCommentAt: now, degradedReason: undefined })
     for (const c of fresh) {
       this.logger.info(`B2 评论：${c.nickName}：${c.content.slice(0, 60)}`)
       this.deps.onComment?.(c as BackendComment)
       for (const listener of this.listeners) listener(c as BackendComment)
     }
+  }
+
+  /**
+   * 手动推一拍失效检测（生产由 staleWatcher 的定时器调用；单测直接调，避免 sleep）。
+   * 只在 live 状态下降级：starting/error/stopped 各有自己的语义，不该被"没数据"覆盖。
+   */
+  tickStaleCheck(): boolean {
+    // stop 后不得再判定失效：定时器虽已取消，但手动/迟到的调用仍需给出"未失效"语义，
+    // 否则调用方会误以为读链路出了问题（状态机已 stopped，不是 degraded）
+    if (this.stopped) return false
+    return this.staleWatcher.tick()
+  }
+
+  private handleStale(): void {
+    if (this.stopped) return
+    if (this.status.state !== 'live') return
+    this.setStatus({
+      state: 'degraded',
+      degradedReason: 'no-data',
+      lastFreshAt: this.lastFreshAt,
+    })
+    this.logger.warn('B2 评论读链路超过 30s 无 comment/info 响应，标记为可能失效')
+  }
+
+  /**
+   * 采集进程已死（headless Chrome 被系统杀掉 / 崩溃）。
+   * 必须显式上报：此前这种故障是**静默**的 —— 进程消失、日志无 stop 记录、
+   * 面板永远 0 条，用户只能对着空白猜测（实测：启动 3.9 小时后进程消失）。
+   */
+  private handleExit(reason: string): void {
+    if (this.stopped) return
+    this.setStatus({ state: 'error', error: `B2 采集进程已退出（${reason}）` })
+    this.logger.warn(`B2 采集进程已退出（${reason}），通知会话层重启`)
+    this.deps.onBackendExit?.(reason)
   }
 
   private setStatus(patch: Partial<CommentBackendStatus>): void {

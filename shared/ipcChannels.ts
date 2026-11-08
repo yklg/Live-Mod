@@ -45,6 +45,8 @@ export const IPC_CHANNELS = {
       comment: 'tasks:commentBackend:comment',
       getState: 'tasks:commentBackend:getState',
       send: 'tasks:commentBackend:send',
+      /** 仅 LM_SHELL_DEBUG=1 注册：注入一条测试评论（无真实直播时验收面板用） */
+      debugInject: 'tasks:commentBackend:debugInject',
     },
     // 视频号上墙
     pinComment: 'tasks:pinComment',

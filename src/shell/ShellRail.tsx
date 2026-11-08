@@ -112,6 +112,15 @@ function ShellRailLayout({ rail }: { rail: ShellRailState }) {
         <div className="flex min-w-0 flex-1 flex-col border-l border-border">
           <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4">
             <span className="flex-1 text-sm font-medium">{activeItem?.label ?? '功能面板'}</span>
+            {/* 面板是 600px overlay，会盖住官方页面右侧（抖店中控台的评论区/观众列表就在那里）。
+                这里明确给出「一键让出右侧」的入口，否则用户会以为官方页面没有评论。 */}
+            <span
+              className="hidden items-center gap-1 text-[10px] text-muted-foreground xl:flex"
+              title="收起面板后即可看到官方页面右侧的评论区"
+            >
+              <kbd className="rounded border border-border px-1 py-0.5 font-mono">⌘\</kbd>
+              <span>让出右侧看网页</span>
+            </span>
             <button
               type="button"
               className="rounded p-1.5 text-muted-foreground hover:bg-muted"

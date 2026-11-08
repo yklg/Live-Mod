@@ -1,5 +1,6 @@
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
 import type { ElectronAPI, IpcChannels } from 'shared/electron-api'
+import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { isShellUiView, parseNoticeTestMsArg, parseShellViewArg } from 'shared/shellView'
 
 type IpcRendererInvokeReturnType<Channel extends keyof IpcChannels> =
@@ -38,6 +39,12 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', ipcRendererApi)
+
+// 调试用评论注入（面板在无真实直播时验收自身显示/回放能力）。
+// 无条件暴露，但主进程只在 LM_SHELL_DEBUG=1 时注册该通道；面板依据 getState().debug 决定是否显示按钮。
+contextBridge.exposeInMainWorld('__lmCommentDebug', {
+  inject: (text: string) => ipcRenderer.invoke(IPC_CHANNELS.tasks.commentBackend.debugInject, text),
+})
 
 // 壳模式同步判定（shell-ui-polish v3）：在渲染层任何模块执行前注入，替代异步 uiStatus 带来的启动竞态。
 const shellViewName = parseShellViewArg(process.argv)

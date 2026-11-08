@@ -18,6 +18,10 @@ export interface CommentBackendStatus {
   state: CommentBackendState
   comments: number
   lastCommentAt?: number
+  /** 最近一次成功解析到 comment/info 的时间（ms）：静默失效判定基线（W4） */
+  lastFreshAt?: number
+  /** 降级归因，供 UI 文案与日志区分「没评论」与「读链路断了」 */
+  degradedReason?: 'no-data' | 'poll-miss'
   error?: string
 }
 
@@ -31,6 +35,12 @@ export interface CommentStateSnapshot {
 export interface BackendPageHandle {
   page: Page
   close: () => Promise<void>
+  /**
+   * 浏览器进程存活探针（Playwright `Browser.isConnected()`）。
+   * 为什么必须有：headless Chrome 会被系统/OOM 静默杀掉，之前没有任何人能察觉 ——
+   * 后端死了但状态仍是 live，面板永远空白且无任何提示（实测：启动 3.9 小时后进程消失，日志无 stop 记录）。
+   */
+  isConnected?: () => boolean
 }
 
 /** 启动所需的依赖注入（AccountSession 提供实现；单测可注入 fake） */
@@ -43,6 +53,12 @@ export interface CommentBackendDeps {
   consoleUrl: string
   onComment?: (c: BackendComment) => void
   onStatus?: (s: CommentBackendStatus) => void
+  /**
+   * 后端进程意外退出（headless Chrome 被系统杀掉 / 崩溃）时回调。
+   * 会话层据此自动重启（带退避与次数上限）并告警 —— 否则采集侧静默死亡，
+   * 消费侧只会看到"永远 0 条"，没有任何线索（这正是本次实测到的真实故障）。
+   */
+  onBackendExit?: (reason: string) => void
   now?: () => number
 }
 
@@ -57,6 +73,11 @@ export interface CommentBackendLike {
   start: () => Promise<CommentBackendStatus>
   stop: () => Promise<void>
   getStatus: () => CommentBackendStatus
+  /**
+   * 存活探针：浏览器进程是否还在。
+   * registry 用它决定"复用还是重建"—— 进程被系统杀掉后旧实例留着只会永远空白。
+   */
+  isAlive?: () => boolean
   /** 订阅评论流（任务层读链路用）；返回取消订阅 */
   subscribe?: (listener: (c: BackendComment) => void) => () => void
   /** 发送评论/回复（自动回复发送链路用） */
@@ -70,5 +91,6 @@ export function toPageHandle(session: BrowserSession): BackendPageHandle {
     close: async () => {
       await session.browser.close().catch(() => {})
     },
+    isConnected: () => session.browser.isConnected(),
   }
 }

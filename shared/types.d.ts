@@ -235,4 +235,8 @@ declare interface Window {
   __lmView?: { name: ShellViewName; shellUi: boolean }
   /** 仅测试口径：通知停留时长覆盖（LM_SHELL_NOTICE_TEST_MS，preload 从 argv 读取） */
   __lmNoticeTestMs?: number
+  /** 调试用评论注入（主进程仅在 LM_SHELL_DEBUG=1 注册；面板据 getState().debug 决定是否显示入口） */
+  __lmCommentDebug?: {
+    inject: (text: string) => Promise<{ ok: boolean; accountId?: string; error?: string }>
+  }
 }

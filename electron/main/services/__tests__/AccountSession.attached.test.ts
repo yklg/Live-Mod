@@ -75,7 +75,12 @@ const h = vi.hoisted(() => {
 
 vi.mock('electron', () => ({ Notification: vi.fn(() => ({ show: vi.fn() })) }))
 vi.mock('#/windowManager', () => ({
-  default: { send: (c: string, a?: unknown) => h.sends.push({ channel: c, arg: a }) },
+  default: {
+    send: (c: string, a?: unknown) => {
+      h.sends.push({ channel: c, arg: a })
+      return true
+    },
+  },
 }))
 vi.mock('#/logger', () => {
   const stub = {

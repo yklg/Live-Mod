@@ -3,6 +3,7 @@ import { ErrorFactory } from '@praha/error-factory'
 import { emitter } from '#/event/eventBus'
 import { createLogger } from '#/logger'
 import { AccountSession } from '#/services/AccountSession'
+import { commentStore } from '#/services/commentBackend/store'
 
 class AccountNotFoundError extends ErrorFactory({
   name: 'AccountNotFoundError',
@@ -51,10 +52,10 @@ export class AccountManager {
 
   closeSession(accountId: string) {
     const accountSession = this.accountSessions.get(accountId)
-    if (!accountSession) return
-
-    accountSession.disconnect()
+    // 先摘登记表再清历史：disconnect 是异步的，反过来的话清理期间到达的评论会重新写进 store
     this.accountSessions.delete(accountId)
+    commentStore.writer.clear(accountId)
+    accountSession?.disconnect()
   }
 
   cleanup() {

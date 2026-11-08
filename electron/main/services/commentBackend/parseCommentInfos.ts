@@ -57,6 +57,22 @@ export function parseCommentInfos(body: string, now = Date.now()): BackendCommen
   return out
 }
 
+/**
+ * 响应体是否是**结构合法**的 comment/info 负载。
+ * 用途：静默失效判定的基线更新依据 —— 合法但 `comment_infos: []`（没人评论）算链路健康；
+ * 空体/非 JSON/缺 data.comment_infos（页面结构变了或落到了别的接口）不算。
+ * 不能用 `body.includes('comment_infos')` 代替：字符串包含会把错误页/调试 JSON 误判为健康。
+ */
+export function isCommentInfoBody(body: string): boolean {
+  if (!body) return false
+  try {
+    const json = JSON.parse(body) as { data?: { comment_infos?: unknown } } | null
+    return Array.isArray(json?.data?.comment_infos)
+  } catch {
+    return false
+  }
+}
+
 /** 最近 N 条 id 去重器（轮询会重复返回同一批评论） */
 export function createCommentDeduper(maxRemember = 500) {
   const order: string[] = []

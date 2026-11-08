@@ -21,7 +21,9 @@ import {
   isPinComment,
   isSendRedPacket,
 } from '#/platforms/IPlatform'
+import { toPageHandle } from '#/services/commentBackend/contracts'
 import { commentBackendRegistry } from '#/services/commentBackend/registry'
+import { commentStore } from '#/services/commentBackend/store'
 import { createAutoCommentTask } from '#/tasks/AutoCommentTask'
 import { createAutoPopupTask } from '#/tasks/AutoPopupTask'
 import type { CommentSourceAdapter } from '#/tasks/CommentListenerTask'
@@ -54,6 +56,14 @@ export class AccountSession {
   private pageOffControl = false
   /** 本段「离开中控台」是否已告警（回到控制页复位 → 每段离开只提示一次，不刷屏） */
   private leaveControlWarned = false
+  /**
+   * B2 采集进程退出时间戳（用于自动重启的退避与次数上限）。
+   * 实测故障：headless Chrome 被系统杀掉后进程静默消失、日志无 stop 记录，
+   * 面板永远 0 条 —— 采集侧必须能自愈，否则只能靠用户肉眼发现。
+   */
+  private commentBackendExitTimes: number[] = []
+  /** 会话是否已断开：断开后不再自动重启 B2 */
+  private sessionClosed = false
 
   constructor(
     platformName: LiveControlPlatform,
@@ -186,26 +196,80 @@ export class AccountSession {
               true,
               JSON.parse(storageState) as StorageState,
             )
-            return {
-              page: launched.page,
-              close: async () => {
-                await launched.browser.close().catch(() => {})
-              },
-            }
+            // 走唯一适配点：手写 {page, close} 会漏掉 isConnected，导致后端死亡检测恒为「活着」
+            return toPageHandle(launched)
           },
-          onComment: comment =>
-            windowManager.send(IPC_CHANNELS.tasks.commentBackend.comment, { accountId, comment }),
-          onStatus: status =>
-            windowManager.send(IPC_CHANNELS.tasks.commentBackend.status, { accountId, status }),
+          onComment: comment => {
+            // 事实先落主进程（写端口唯一），再推送渲染层。推送失败不影响事实留存。
+            commentStore.writer.append(accountId, [comment])
+            windowManager.send(IPC_CHANNELS.tasks.commentBackend.comment, { accountId, comment })
+          },
+          onStatus: status => {
+            commentStore.writer.setStatus(accountId, status)
+            windowManager.send(IPC_CHANNELS.tasks.commentBackend.status, { accountId, status })
+          },
+          // 采集进程被系统杀掉 → 会话层自愈（此前是静默死亡：进程消失、日志无 stop、面板永远空白）
+          onBackendExit: reason => this.handleCommentBackendExit(reason),
         })
         .then(status => {
-          if (status.state === 'live') logger.success('B2 评论后端已连接（headless 真实 Chrome）')
-          else logger.warn('B2 评论后端未就绪：', status.error ?? status.state)
+          if (status.state === 'live') {
+            logger.success('B2 评论后端已连接（headless 真实 Chrome）')
+          } else {
+            const reason = status.error ?? status.state
+            logger.warn('B2 评论后端未就绪：', reason)
+            // 明确提示用户：壳内评论链路异常（此前静默吞掉，用户只看到面板空）
+            windowManager.sendTo(
+              'ui',
+              IPC_CHANNELS.shell.warnToast,
+              `直播互动后端未就绪：${reason.slice(0, 80)}`,
+            )
+          }
         })
-        .catch(e => logger.warn('B2 评论后端启动失败（不影响主流程）：', String(e).slice(0, 200)))
+        .catch(e => {
+          const msg = String(e).slice(0, 200)
+          logger.warn('B2 评论后端启动失败（不影响主流程）：', msg)
+          // 启动异常也提示用户
+          windowManager.sendTo(
+            'ui',
+            IPC_CHANNELS.shell.warnToast,
+            `直播互动后端启动失败：${msg.slice(0, 80)}`,
+          )
+        })
     } catch (e) {
-      this.logger.warn('B2 评论后端接入跳过：', String(e).slice(0, 200))
+      const msg = String(e).slice(0, 200)
+      this.logger.warn('B2 评论后端接入跳过：', msg)
+      // 接入跳过也提示（partition/page 等前置条件不满足时）
+      windowManager.sendTo(
+        'ui',
+        IPC_CHANNELS.shell.warnToast,
+        `直播互动后端接入跳过：${msg.slice(0, 80)}`,
+      )
     }
+  }
+
+  /**
+   * B2 采集进程退出（headless Chrome 被系统/OOM 杀掉）→ 自动重启。
+   * 退避与次数上限：60s 内最多 3 次，超出则停手并告警（防重启风暴把机器拖垮）。
+   */
+  private handleCommentBackendExit(reason: string): void {
+    if (this.sessionClosed) return
+    const now = Date.now()
+    this.commentBackendExitTimes = this.commentBackendExitTimes.filter(t => now - t < 60_000)
+    if (this.commentBackendExitTimes.length >= 3) {
+      this.logger.error(
+        `B2 评论后端 60s 内退出 ${this.commentBackendExitTimes.length} 次，已暂停自动重启（请检查内存/系统回收）`,
+      )
+      return
+    }
+    this.commentBackendExitTimes.push(now)
+    this.logger.warn(
+      `B2 评论后端退出（${reason}），2s 后自动重启（第 ${this.commentBackendExitTimes.length} 次）`,
+    )
+    setTimeout(() => {
+      if (this.sessionClosed) return
+      void commentBackendRegistry.stop(this.account.id).catch(() => {})
+      this.maybeStartCommentBackend()
+    }, 2000)
   }
 
   /** 任务层端口：读链路（source）/发送链路（sender）都走 B2 后端；无后端则返回空（回退旧 page 路径） */
@@ -321,6 +385,7 @@ export class AccountSession {
 
   disconnect() {
     this.liveEndedHandled = true
+    this.sessionClosed = true
     void commentBackendRegistry.stop(this.account.id).catch(() => {})
     if (isLiveStatusWatcher(this.platform)) {
       this.platform.stopLiveStatusWatch()

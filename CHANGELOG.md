@@ -8,13 +8,29 @@
 - 自动化页面保活不变量（E2E 固化 `poc/shell/e2e-tab-liveness.mjs`）：会话页在**非激活 / 窗口最小化 / 长驻**下定时器不被冻结、Playwright click/fill/dispatch/scroll 仍可用——自动讲解在用户切走页面后继续生效；焦点契约（`TabView.focus`）仅前台激活/显式切 Tab 触发，close/migrate 不抢焦点
 - 评论监听健壮性：修复 `ControlListener.keepPageRunning` 死代码（`isRunning` 从未置 true，保活从未执行；修复后**只点「新评论」按钮**，不再通用点击 auxo 弹窗主按钮——避免误触真实配置弹窗、也不抢走下播判定专用的「直播总结」信号）；新增评论通道存活探针（连续 30s 无非空 `comment/info` 数据 → 日志 + toast 提示，不静默、不停止监听，60s 冷却；解析失败告警同样 60s 冷却防刷屏）；`CompassListener` 在壳内 attach 模式改用新的 `BrowserSession.createAuxPage`（隐藏窗口 + nonce 寻址），不再依赖 attach 下不可用的 `context.newPage()`，且失败路径回收 aux 载体并抛出原错误（不再静默丢弃 Promise）
 - 会话页身份观测：`AccountSession` 监听主 frame 导航，离开中控台且任务运行中时提示「中控台页面已离开，任务可能失效」（每段离开一次，回中控页复位）；平台层新增 `IPlatform.isControlPageUrl` 契约（域名知识仍在平台层），身份判据按**已知中控台路由白名单**匹配（`/ffa/content-tool/live/control`、`/ffa/buyin/dashboard/live/control`、`/dashboard/live/control`、`/livesite/live/current`），同站业务页/菜单漂移不再被误判为「仍在中控台」
+- 业务面板一键隐藏：`Cmd/Ctrl + \` 在任意视图聚焦时切换右栏业务面板开合（官方中控台页面聚焦同样生效），面板头部同步显示 `⌘\` 提示——右栏是 600px overlay，官方页面右侧被遮挡时不再只能靠点 rail 图标
+- B2 真实 Chrome 评论后端（壳内「直播互动」面板的读 / 写链路）：用独立 **headless 真实 Chrome** 打开抖店中控台，**被动监听**官方页面自己发出的 `comment/info` 响应（不发请求、不依赖 Electron 指纹），读取实时评论；发送回复同样经该真实 Chrome 页面完成，并与自动回复任务闭环接线。面板支持发送评论、多账号归属与连接状态显示
+- 壳内评论监听自动启动：壳 UI 连接后自动启动评论监听（B2 后端已随 `connect()` 启动），不再需要手动点「开始监听」；经典模式保留手动语义（平台原生监听器启动成本高，用户知情）
+- 调试注入通道（主进程仅 `LM_SHELL_DEBUG=1` 时注册 `tasks:commentBackend:debugInject`，生产不存在该通道），面板提供「注入测试评论」按钮：不连直播即可验证面板的显示 / 切页回放 / 快照合并链路
+- 工程：新增 `scripts/start-dev.sh` 一键启动壳模式 dev（自动解除 `ELECTRON_RUN_AS_NODE` 注入、解除 Vite 批量删除守卫、显式绑定 `127.0.0.1`，Ctrl+C 退出）
 
 ### 🐞 Bug Fixes
 
+- 修复自动讲解对「正在讲解」商品的无停顿来回切换：商品已处于讲解中（按钮显示「取消讲解」）时，此前仍会先点一次「取消讲解」再点「讲解」，把正在进行的讲解取消后立刻重启——运营侧看到状态来回切换，且页面按钮态未稳定时第二次点击可能丢失。现将 `toggleButton` 改为**「确保按钮处于目标状态」**语义：已在讲解中直接视为本轮就绪、**零点击**，下一轮由任务队列推进到下一个商品；仅当按钮处于「讲解」源态时才点击（点击后 1s 复查、最多重试 5 次，文案漂移/禁用态照旧报错）。抖音小店/巨量百应/抖音团购（经 `toggleButton`）与快手（平台独立实现）同此语义；并补充 `toggleButton` 契约单测（已在讲解零点击/点击后不足再点/文案漂移/禁用态/尝试上限）
+- 修复壳内「直播互动」面板切走/关闭后评论列表清空：评论事实此前只存在渲染层组件内存（`LiveInteraction` 的 `useState`），主进程 `getState` 只返回状态无历史。现新增主进程 `CommentStore`（写读端口分离、每账号 200 条 / 全局 500 条环形缓冲、淘汰打 stderr），`getState` 返回每账号最近 100 条，面板重挂载/切页后可回放；关闭账号时同步清理历史
+- 修复评论 IPC 在 dev 下必然被拒：`ipc/commentBackend.ts` 的来源判据是 `url.includes('/dist/rail.html')`，而 dev URL 不含 `/dist/`。现改为**通道级声明表 + 统一前置校验**（`CHANNEL_TRUST`），判据按视图身份（rail/chrome/entry/notice/classic），dev 与打包一致；新增源码扫描测试防止新增受限通道漏声明
+- 修复 IPC 无来源授权机制：`typedIpcMainHandle` 此前仅做类型包装，新增 handler 默认无来源约束。现在受限通道必须在 `CHANNEL_TRUST` 声明，未声明的通道行为完全不变（52 处注册里 50 处零回归）
+- 修复多账号下可读写任意 `accountId` 评论的越权：`getState` 只暴露仍登记在案会话的数据，`send` 对未知账号返回 `{ ok:false }`
+- 修复业务事件静默进黑洞：`windowManager.sendTo` 在 `ui` 目标缺失时会隐式回退到主窗口 webContents，而壳模式下主窗口是不加载内容的纯容器（事件丢失且无任何报错）。现已**删除隐式回退**，改为显式登记目标 + 待发队列（关键事件白名单 18 个通道：10 条显式 + `updater:` 前缀，队列容量 32 / TTL 30s）+ 首次失败打 stderr（不走 logger，避免 logger 经 send 推送造成递归）；经典模式改为显式 `setUITarget`
+- 修复 B2 评论读链路静默失效：`page.on('response')` 不命中时无任何信号，面板永远 0 条且无原因。现以「comment/info 响应是否还来」为基线（合法空列表算健康），超过 30s 无响应标记 `degraded` 并在面板显示「可能失效」与最近一次响应时间；收到数据即自动回 `live`
+- 修复面板评论合并的跨账号误删：去重键由裸 `id` 改为 `(accountId, id)`（官方 `comment_id` 只在单场直播内唯一，多账号可能撞车），排序与主进程 store 共用同一比较器
+- 修复 `getState` 失败被静默吞掉（`.catch(() => {})`）：面板现在显示「读取历史失败：<原因>」，dev 下门禁问题不再表现为「永远未连接」且无线索
 - 修复壳内点击中控台功能导致「当前页被替换 → 误判直播已结束 → 直接断开并销毁会话/Tab」：`liveStatusWatcher` 新增页面身份观测（`isObservingPage`/`onUnobservable`）——页面已离开中控台时**不计数、不判下播**，恢复可观测后原 armed 语义不变；同时新增弹窗兜底导航抑制（官方页 `if(!w) location.href` 兜底不再劫持当前页）
 - 修复误判下播的破坏性后果：`handleLiveEnded` 拆分为「停止全部任务 + 通知」，**不再自动断开/销毁会话与 Tab**（断开由用户显式操作；实测「直播总结」误判时不再丢中控台页面）
 - 修复 `WebContentsView` 上页面 `window.close()` 无守卫的隐患：明确弹窗策略不再依赖 `allow`（allow 产生不可管理的原生窗口），自复制弹窗保持 deny
 - 修复 `LM_CDP_PORT=0` 被判非法端口导致 attach 静默降级外部浏览器：`'0'` 按「随机端口」处理（走 `DevToolsActivePort` 发现链）
+- 修复 B2 采集进程静默死亡后永久空白：`headless Chrome` 被系统杀掉时（实测启动 3.9 小时后进程消失、日志无 stop 记录、面板永远 0 条）此前无任何信号。现以 `Browser.isConnected()` 为存活探针（`BackendPageHandle.isConnected`，**统一经 `toPageHandle` 构造**，手写句柄会漏字段导致探针恒真），5s 周期探测、与「无数据」严格区分；`registry.ensure` 发现实例已死则丢弃重建，会话层收到退出后 2s 自动重启（60s 内最多 3 次防风暴）
+- 修复 B2 依赖装配漏接存活探针：`AccountSession` 的 `createSession` 此前手写 `{ page, close }` 绕过了唯一适配点，使 `isConnected` 恒为 `true`、死亡检测完全失效。现改为复用 `toPageHandle`，并新增源码扫描测试（`depsAssembly.test.ts`）守卫「句柄只允许一处构造」
 - 修复评论监听失败静默：抖音小店 `startCommentListener` 丢弃 Promise（罗盘监听失败无任何报错、UI 仍显示监听中）——改为与会话层同构的返回 Promise，失败可被任务层捕获
 
 ## v1.7.0
