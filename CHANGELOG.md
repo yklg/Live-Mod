@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.9.0
+
 ### 🚀 Features
 
 - 壳 UI 成为唯一运行形态（移除经典模式）：删除经典启动分支 / `LM_SHELL_UI` 开关 / 经典独立壳窗口承载档 / 「壳模式（实验）」设置开关。应用启动即为光圈式壳容器（chrome 顶栏 + rail 业务树 + entry 平台选择器 + notice 通知覆盖层 + 壳内 Tab 承载官方页），连接默认走壳内 attach（抖音系白名单：douyin / buyin / eos），「强制外部浏览器（调试用）」为唯一连接方式逃生口
