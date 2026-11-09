@@ -5,6 +5,7 @@
   "directories": {
     "output": "release/${version}"
   },
+  "afterPack": "scripts/afterPackSignMac.mjs",
   "electronLanguages": ["zh-CN", "en-US"],
   "files": ["dist-electron", "dist"],
   "mac": {

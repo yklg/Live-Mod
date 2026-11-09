@@ -35,13 +35,30 @@
 
 ### 系统要求
 
-- 操作系统：Windows 10 及以上 | MacOS 也能试试
+- 操作系统：Windows 10 及以上 | macOS 11 及以上（Apple 芯片 / Intel）
 - 浏览器：电脑上需要安装 Chrome 或 Edge 浏览器
 - 抖音小店/巨量百应/抖音团购/小红书千帆：账号需要能正常进入中控台
 
 ### 下载安装
 
-Release 安装包将在开源仓库发布后提供，当前请通过[源码构建](#源码构建)。
+在 [Releases](https://github.com/yklg/Live-Mod/releases) 页面下载对应平台的安装包：
+
+- **Windows**：`live-mod_<版本>_windows_x64.exe`（双击安装，可选择安装目录）
+- **macOS**：`live-mod_<版本>_macos_arm64.dmg`（Apple 芯片）或 `live-mod_<版本>_macos_x64.dmg`（Intel 芯片），打开 DMG 后把 **Live Mod** 拖进「应用程序」
+
+> [!IMPORTANT]
+> **macOS 首次打开提示「已损坏，无法打开」或「无法验证开发者」**：这是 macOS Gatekeeper 对**从网络下载的未签名/未公证 App** 的正常拦截，**不是安装包损坏**（可先用 `hdiutil verify <dmg>` 校验）。按下面方式处理即可：
+>
+> ```bash
+> # 1) 移除下载隔离标记（推荐先试这个）
+> xattr -cr "/Applications/Live Mod.app"
+> # 2) 若仍打不开（旧版本发布包签名残缺，v1.8.0 及更早），补一次 ad-hoc 签名
+> codesign --force --deep --sign - "/Applications/Live Mod.app"
+> ```
+>
+> 也可以：在「应用程序」中**右键 Live Mod → 打开**（而不是双击）；若仍被拦，到「系统设置 → 隐私与安全性」页面底部点「仍要打开」。
+>
+> 新版发布包会在打包时自动做 ad-hoc 签名（见 `scripts/afterPackSignMac.mjs`），通常只需第 1 步。未公证意味着无法完全排除被篡改的可能：请只从本仓库 Release 页面下载，并可用 `latest-mac.yml` 中的 SHA-512 自行核验。
 
 ### 源码构建
 
@@ -52,6 +69,9 @@ pnpm install
 pnpm build
 # 构建在项目根目录的 /release 文件夹下
 ```
+
+> [!NOTE]
+> macOS 上 `pnpm build` 会在打包后自动对 `.app` 做 ad-hoc 签名（`scripts/afterPackSignMac.mjs`）；未配置 Apple Developer 证书时，首次打开仍需按上文清理隔离标记。
 
 
 ## 📖 使用方法

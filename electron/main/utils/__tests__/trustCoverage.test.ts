@@ -2,7 +2,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+// CI 的 Unit Tests workflow 设置 ELECTRON_SKIP_BINARY_DOWNLOAD=1（不下载 Electron 二进制）：
+// 此时 `#/utils/ipc` 顶层的 `import { ipcMain } from 'electron'` 会抛
+// "Electron failed to install correctly"。本测试只做源码扫描 + 读静态声明表，不需要真实 ipcMain。
+vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn(), on: vi.fn() },
+}))
+
 import { CHANNEL_TRUST } from '#/utils/ipc'
 
 // ===== 授权声明覆盖（W2 · TC-GT1~GT4，源码扫描式契约断言）=====
