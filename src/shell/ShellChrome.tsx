@@ -30,7 +30,7 @@ export default function ShellChrome() {
       try {
         setState(await window.ipcRenderer.invoke(IPC_CHANNELS.shell.tabsList))
       } catch {
-        // 壳未就绪（经典模式误载）：静默，顶栏保持空态
+        // 壳未就绪（容器初始化中/异常）：静默，顶栏保持空态
       }
     })()
     return window.ipcRenderer.on(IPC_CHANNELS.shell.tabsState, s => setState(s))

@@ -11,8 +11,9 @@
 # 用法：
 #   ./scripts/start-dev.sh              # 壳模式 + 调试（默认）
 #   LM_SHELL_DEBUG=0 ./scripts/start-dev.sh   # 壳模式，无调试按钮
-#   LM_SHELL_UI=0 ./scripts/start-dev.sh      # 经典模式（评论面板恒 0 条，B2 后端不启动）
 # 退出：Ctrl+C
+#
+# 注：经典模式已移除（v1.9.0），应用只有壳 UI 形态；LM_SHELL_UI 环境变量不再被读取。
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -21,10 +22,9 @@ unset ELECTRON_RUN_AS_NODE
 unset CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR
 unset CODEBUDDY_TOOL_CALL_ID
 
-export LM_SHELL_UI="${LM_SHELL_UI:-1}"
 export LM_SHELL_DEBUG="${LM_SHELL_DEBUG:-1}"
 
-echo "[start-dev] LM_SHELL_UI=$LM_SHELL_UI LM_SHELL_DEBUG=$LM_SHELL_DEBUG"
+echo "[start-dev] 壳 UI（唯一形态） LM_SHELL_DEBUG=$LM_SHELL_DEBUG"
 echo "[start-dev] Ctrl+C 退出"
 
 # exec：让 vite 成为前台进程，Ctrl+C 直接终止整棵进程树

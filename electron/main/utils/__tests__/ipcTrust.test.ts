@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // ===== IPC 来源授权矩阵（W2 · TC-TR1~TR7）=====
 // 守护不变量：
 //   C-TR1 声明表存在（漏建则后续全部失效）
-//   C-TR2 rail（壳）/ classic（经典主窗口）放行 —— dev 与打包 URL 都要认，这是 P0-1 的回归点
+//   C-TR2 rail（壳完整业务树）放行 —— dev 与打包 URL 都要认，这是 P0-1 的回归点；
+//         经典模式入口随经典模式移除而拒绝（来源 unknown）
 //   C-TR3 chrome / entry / notice 拒绝（缩小暴露面）
 //   C-TR4 未注册判定器 = fail-closed（拒绝，而不是默认放行）
 //   C-TR5 sender.getURL 异常仍归约为拒绝，不产生未处理异常逃逸
@@ -58,14 +59,22 @@ describe('IPC 授权矩阵（TC-TR1~TR7）', () => {
     expect(CHANNEL_TRUST[IPC_CHANNELS.tasks.commentBackend.send]).toBe('business-ui')
   })
 
-  it('TC-TR2 rail 与 classic 放行（dev/prod 两种 URL 都认）', () => {
+  it('TC-TR2 rail 放行（dev/prod 两种 URL 都认）', () => {
     const listener = vi.fn(() => ({ accounts: [], debug: false }))
     typedIpcMainHandle(RESTRICTED, listener)
 
-    for (const url of [DEV_RAIL, PROD_RAIL, DEV_CLASSIC, PROD_CLASSIC]) {
+    for (const url of [DEV_RAIL, PROD_RAIL]) {
       expect(() => call(RESTRICTED, url)).not.toThrow()
     }
-    expect(listener).toHaveBeenCalledTimes(4)
+    expect(listener).toHaveBeenCalledTimes(2)
+  })
+
+  it('TC-TR2b 经典模式入口不再放行（经典模式已移除，来源归约为 unknown）', () => {
+    typedIpcMainHandle(RESTRICTED, () => ({ accounts: [], debug: false }))
+
+    for (const url of [DEV_CLASSIC, PROD_CLASSIC]) {
+      expect(() => call(RESTRICTED, url)).toThrow(/实际来源 unknown/)
+    }
   })
 
   it('TC-TR3 chrome / entry / notice 一律拒绝', () => {
@@ -115,13 +124,17 @@ describe('IPC 授权矩阵（TC-TR1~TR7）', () => {
 })
 
 describe('classifyViewUrl（P0-1 判据回归）', () => {
-  it('dev 与 prod 的 rail/index 都要识别，不能依赖 /dist/ 路径', () => {
+  it('dev 与 prod 的 rail 都要识别，不能依赖 /dist/ 路径', () => {
     expect(classifyViewUrl(DEV_RAIL)).toBe('rail')
     expect(classifyViewUrl(PROD_RAIL)).toBe('rail')
     expect(classifyViewUrl('http://localhost:5173/rail.html')).toBe('rail')
-    expect(classifyViewUrl(PROD_CLASSIC)).toBe('classic')
-    expect(classifyViewUrl(DEV_CLASSIC)).toBe('classic')
     expect(classifyViewUrl('https://buyin.jinritemai.com/dashboard')).toBe('unknown')
     expect(classifyViewUrl('')).toBe('unknown')
+  })
+
+  it('经典模式入口（index/根路径）不再识别为受信视图', () => {
+    expect(classifyViewUrl(PROD_CLASSIC)).toBe('unknown')
+    expect(classifyViewUrl(DEV_CLASSIC)).toBe('unknown')
+    expect(classifyViewUrl('http://localhost:5173/')).toBe('unknown')
   })
 })

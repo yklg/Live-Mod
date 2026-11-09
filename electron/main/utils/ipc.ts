@@ -11,17 +11,16 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 // 零回归原则：**未在 CHANNEL_TRUST 声明的通道不执行来源校验**（52 处注册里 50 处行为完全不变）。
 
 /** 本地受信视图身份（pageView 官方远程页不在此列：无 preload + nodeIntegration:false，天然不可达） */
-export type ShellViewKind = 'rail' | 'chrome' | 'entry' | 'notice' | 'classic' | 'unknown'
+export type ShellViewKind = 'rail' | 'chrome' | 'entry' | 'notice' | 'unknown'
 
 /**
  * 信任级别：
- * - `business-ui`：承载业务 UI 的本地视图（壳 rail / 经典 index）。评论面板在两种形态下都会渲染，
- *   所以 classic 必须放行 —— 否则经典模式面板恒「未连接」。
+ * - `business-ui`：承载业务 UI 的本地视图（壳 rail 完整业务树）。评论面板只在 rail 渲染。
  * - chrome / entry / notice 只做壳级 UI，不需要业务通道 ⇒ 拒绝（缩小暴露面）。
  */
 export type TrustLevel = 'business-ui'
 
-const BUSINESS_UI_KINDS: readonly ShellViewKind[] = ['rail', 'classic']
+const BUSINESS_UI_KINDS: readonly ShellViewKind[] = ['rail']
 
 export const CHANNEL_TRUST: Partial<Record<keyof IpcChannels, TrustLevel>> = {
   [IPC_CHANNELS.tasks.commentBackend.getState]: 'business-ui',
@@ -35,8 +34,6 @@ export function classifyViewUrl(url: string): ShellViewKind {
   for (const kind of ['rail', 'chrome', 'entry', 'notice'] as const) {
     if (url.includes(`/${kind}.html`)) return kind
   }
-  // 经典模式：vite dev server 根，或打包后的 dist/index.html
-  if (url.includes('/index.html') || url.endsWith('/')) return 'classic'
   return 'unknown'
 }
 

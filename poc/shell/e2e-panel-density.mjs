@@ -2,7 +2,7 @@
 // 前置：npx vite build
 // 运行：node poc/shell/e2e-panel-density.mjs（W1 可用 EXPECT_PANEL_W=800 预检；W2 起默认 600）
 // 断言：面板内密度(16px)、折叠 aria-expanded、逐路由无横向溢出、两列列宽、弹窗居中、
-//       面板宽度/页面可见宽度、minWidth 钳制、经典模式零变化（24px/20px）、明暗截图。
+//       面板宽度/页面可见宽度、minWidth 钳制、明暗截图。（经典模式已移除，v1.9.0 起不再有经典零变化断言）
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -32,22 +32,21 @@ async function waitFor(fn, timeoutMs, label) {
   throw new Error(`等待超时（${timeoutMs}ms）：${label}`)
 }
 
-function childEnv(shellUi) {
+function childEnv() {
   const env = {
     ...process.env,
     ELECTRON_DISABLE_SANDBOX: '1',
     LM_SHELL_DEBUG: '1',
-    ...(shellUi ? { LM_SHELL_UI: '1' } : {}),
   }
   delete env.ELECTRON_RUN_AS_NODE
   return env
 }
 
-async function launch(profileDir, shellUi) {
+async function launch(profileDir) {
   const app = await electron.launch({
     args: ['.', `--user-data-dir=${profileDir}`, '--no-sandbox'],
     cwd: repo,
-    env: childEnv(shellUi),
+    env: childEnv(),
   })
   const mainLog = []
   app.process().stdout?.on('data', d => mainLog.push(d.toString()))
@@ -59,7 +58,7 @@ async function launch(profileDir, shellUi) {
       if (!a.__shellDebug) throw new Error('LM_SHELL_DEBUG 契约缺失')
       return a.__shellDebug()
     })
-  if (shellUi) await waitFor(() => debug(), 15_000, 'shellDebug 就绪')
+  await waitFor(() => debug(), 15_000, 'shellDebug 就绪')
   const port = readFileSync(path.join(profileDir, 'DevToolsActivePort'), 'utf-8')
     .split('\n')[0]
     .trim()
@@ -129,10 +128,9 @@ async function railEval(rail, fn, arg) {
 async function main() {
   mkdirSync(outDir, { recursive: true })
   const shellProfile = `/tmp/lm-e2e-panel-${stamp}`
-  const classicProfile = `/tmp/lm-e2e-panel-classic-${stamp}`
   let ctx = null
   try {
-    ctx = await launch(shellProfile, true)
+    ctx = await launch(shellProfile)
     const rail = await ctx.pageBy('rail.html')
     await ctx.invoke('shell:railToggle', 'live')
     await waitFor(
@@ -402,48 +400,6 @@ async function main() {
     }
   } finally {
     await teardown(ctx)
-  }
-
-  // ---- M8 经典模式零变化 ----
-  let classic = null
-  try {
-    classic = await launch(classicProfile, false)
-    const page = classic.win
-    await page.waitForLoadState().catch(() => {})
-    await page.waitForSelector('[data-testid="status-card"]', { timeout: 20_000 }).catch(() => {})
-    const st = await waitFor(
-      async () => {
-        const r = await page.evaluate(() => {
-          const card = document.querySelector(
-            '[data-testid="status-card"] [data-slot="card-content"]',
-          )
-          const title = document.querySelector('[data-testid="page-title"]')
-          return {
-            cardPadding: card ? getComputedStyle(card).paddingLeft : null,
-            titleFont: title ? getComputedStyle(title).fontSize : null,
-          }
-        })
-        return r.cardPadding ? r : null
-      },
-      20_000,
-      '经典页 LiveControl',
-    )
-    const urls = classic.pages().map(p => p.url())
-    const noShellViews = !urls.some(u => /(notice|entry|chrome|rail)\.html/.test(u))
-    const png = await classic.app.evaluate(async ({ BrowserWindow }) => {
-      const w = BrowserWindow.getAllWindows()[0]
-      return Array.from((await w.webContents.capturePage()).toPNG())
-    })
-    writeFileSync(path.join(outDir, 'panel-classic.png'), Buffer.from(png))
-    record(
-      'M8 经典模式零变化（Card 24px / 标题 20px / 无壳视图）',
-      st.cardPadding === '24px' && st.titleFont === '20px' && noShellViews,
-      `card=${st.cardPadding} title=${st.titleFont} noShellViews=${noShellViews}`,
-    )
-  } catch (e) {
-    record('M8 经典模式零变化（Card 24px / 标题 20px / 无壳视图）', false, String(e.message ?? e))
-  } finally {
-    await teardown(classic)
   }
 
   const failed = results.filter(r => !r.ok)

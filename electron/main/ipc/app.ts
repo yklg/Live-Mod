@@ -30,7 +30,7 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(IPC_CHANNELS.account.switch, (_, { account }) => {
     accountManager.setAccountName(account.id, account.name)
-    // 单窗口壳形态（Phase 2.3）：换挂 active pageView；经典模式下为无害空操作
+    // 单窗口壳形态（Phase 2.3）：换挂 active pageView
     void import('#/windows/shellUI').then(m => m.setActiveAccount(account.id))
   })
 }

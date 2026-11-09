@@ -2,7 +2,7 @@
 // 为什么必须自定义：Electron 默认菜单的 Zoom 角色作用于「聚焦 BrowserWindow 的 webContents」，
 // 光圈式壳里业务页在 WebContentsView（pageView）中，默认角色对壳内 Tab 无效（容器 webContents 只是壳）。
 // 本菜单把缩放直达 shellUI facade（作用于当前活跃 Tab），其它菜单项保持系统常规角色。
-// 经典模式不安装本菜单（app.ts 仅在壳模式调用），经典行为零变化。
+// 壳 UI 是唯一运行形态：应用启动即安装本菜单（承载缩放/面板开合快捷键）。
 import { Menu, type MenuItemConstructorOptions } from 'electron'
 
 export interface ShellZoomControls {

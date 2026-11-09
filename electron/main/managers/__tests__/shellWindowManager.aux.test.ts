@@ -10,7 +10,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => {
   let seq = 0
   const installExternalProtocolGuard = vi.fn()
-  const preventPageInitiatedClose = vi.fn()
 
   class FakeBrowserWindow {
     static instances: FakeBrowserWindow[] = []
@@ -86,7 +85,6 @@ const h = vi.hoisted(() => {
 
   return {
     installExternalProtocolGuard,
-    preventPageInitiatedClose,
     FakeBrowserWindow,
     resetInstances: () => {
       FakeBrowserWindow.instances.length = 0
@@ -110,9 +108,6 @@ vi.mock('#/logger', () => {
 vi.mock('#/windows/externalProtocolGuard', () => ({
   installExternalProtocolGuard: h.installExternalProtocolGuard,
 }))
-vi.mock('#/windows/pageCloseGuard', () => ({
-  preventPageInitiatedClose: h.preventPageInitiatedClose,
-}))
 vi.mock('#/windows/popupPolicy', () => ({ classifyPopup: vi.fn(() => 'external') }))
 vi.mock('#/windows/shellTabManager', () => ({
   accountTabPartition: (accountId: string) => `persist:lm-shell-${accountId}`,
@@ -128,7 +123,6 @@ import { shellWindowManager } from '../../windows/shellWindowManager'
 beforeEach(() => {
   h.resetInstances()
   h.installExternalProtocolGuard.mockClear()
-  h.preventPageInitiatedClose.mockClear()
 })
 
 describe('shellWindowManager.openAux（隐藏辅助页窗口）', () => {

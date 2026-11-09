@@ -10,9 +10,7 @@ export type ConnectPayloadInput = {
   headless: boolean
   chromePath: string | undefined
   storageState: string | undefined
-  uiStatus: boolean
   forceExternal: boolean
-  shellMode: boolean
 }
 
 export type ConnectPayload = {
@@ -25,11 +23,7 @@ export type ConnectPayload = {
 }
 
 export function buildConnectPayload(input: ConnectPayloadInput): ConnectPayload {
-  const mode = resolveConnectModePayload({
-    uiStatus: input.uiStatus,
-    forceExternal: input.forceExternal,
-    shellMode: input.shellMode,
-  })
+  const mode = resolveConnectModePayload({ forceExternal: input.forceExternal })
 
   return {
     // 淘宝会触发人机验证：强制关闭无头模式，保证窗口可见（与既有面板连接行为一致）

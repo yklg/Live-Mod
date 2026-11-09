@@ -248,43 +248,27 @@ const HeadlessSetting = () => {
   )
 }
 
+/**
+ * 「强制外部浏览器」逃生口（调试/风控兜底）：壳 UI 是唯一运行形态后，这是连接方式唯一的用户可见开关。
+ * 旧经典模式的「壳模式（实验）」开关随经典模式一并移除 —— 壳内登录已是默认链路。
+ */
 const ShellModeSetting = () => {
-  const shellMode = useCurrentChromeConfig(context => context.shellMode ?? false)
   const forceExternal = useCurrentChromeConfig(context => context.forceExternal ?? false)
   const isConnected = useCurrentLiveControl(context => context.isConnected)
-  const { setShellMode, setForceExternal } = useCurrentChromeConfigActions()
-  const uiStatus = useShellUiStatus()
+  const { setForceExternal } = useCurrentChromeConfigActions()
 
-  // v3 形态隔离：壳 UI 下开关语义为「强制外部浏览器（调试用）」逃生口；经典模式维持实验开关原语义
-  if (uiStatus) {
-    return (
-      <div className="flex justify-between items-center">
-        <div>
-          <div className="text-sm">强制外部浏览器（调试用）</div>
-          <div className="text-muted-foreground text-xs">
-            连接默认在壳内浏览器登录（抖音系）；开启后改由外部 Chrome/Edge 承载
-          </div>
-        </div>
-        <Switch
-          checked={forceExternal}
-          disabled={isConnected !== 'disconnected'}
-          onCheckedChange={v => setForceExternal(v)}
-        />
-      </div>
-    )
-  }
   return (
     <div className="flex justify-between items-center">
       <div>
-        <div className="text-sm">壳模式（实验）</div>
+        <div className="text-sm">强制外部浏览器（调试用）</div>
         <div className="text-muted-foreground text-xs">
-          在应用内壳窗口中打开中控台并由其驱动，无需独立浏览器；若平台异常将自动回退经典模式
+          连接默认在壳内浏览器登录（抖音系）；开启后改由外部 Chrome/Edge 承载
         </div>
       </div>
       <Switch
-        checked={shellMode}
+        checked={forceExternal}
         disabled={isConnected !== 'disconnected'}
-        onCheckedChange={v => setShellMode(v)}
+        onCheckedChange={v => setForceExternal(v)}
       />
     </div>
   )

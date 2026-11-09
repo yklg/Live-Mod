@@ -15,7 +15,7 @@ export function buildShellViewArg(viewName: ShellViewName): string {
   return `${SHELL_VIEW_ARG_PREFIX}${viewName}`
 }
 
-/** 未知/缺失/非法一律保守归 index（经典模式语义，与既有行为一致） */
+/** 未知/缺失/非法一律保守归 index（经典模式已移除：该值仅作历史参数兼容，永不产生壳 UI 语义） */
 export function parseShellViewArg(argv: readonly string[]): ShellViewName {
   for (const arg of argv) {
     if (!arg.startsWith(SHELL_VIEW_ARG_PREFIX)) continue
@@ -25,7 +25,7 @@ export function parseShellViewArg(argv: readonly string[]): ShellViewName {
   return 'index'
 }
 
-/** 壳 UI = 非经典 index 入口（chrome/rail/entry/notice 均属壳模式） */
+/** 壳 UI = 非 index 入口（chrome/rail/entry/notice 均属壳 UI 视图） */
 export function isShellUiView(viewName: ShellViewName): boolean {
   return viewName !== 'index'
 }

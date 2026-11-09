@@ -44,7 +44,7 @@ function setupIpcHandlers() {
               error instanceof AttachSessionError ? error.reason : error,
             )
             runtimeEnvState.degrade(platform)
-            // v3·决策3：降级不静默——rail 明示（经典模式无监听静默丢弃属预期，见计划 Assumptions）
+            // v3·决策3：降级不静默——rail 明示 + 壳级通知覆盖层双发
             // 双发：warnToast 保留开源 fork 监听契约；pushNotice 走壳级通知覆盖层（本仓 UI 实际消费）
             windowManager.sendTo(
               'ui',

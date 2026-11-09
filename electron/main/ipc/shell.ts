@@ -1,5 +1,5 @@
 // 光圈式壳界面 IPC（guangquan-shell-ui-parity v3 · 3)）：全部转发 shellUI facade。
-// 经典模式下渲染层不触达这些通道；handler 内 shellUI 未就绪时抛「壳容器未就绪」（错误在正确边界暴露）。
+// 只有壳 UI 视图会触达这些通道；handler 内 shellUI 未就绪时抛「壳容器未就绪」（错误在正确边界暴露）。
 import { BrowserWindow, session } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { typedIpcMainHandle } from '#/utils'
@@ -56,7 +56,7 @@ function setupIpcHandlers() {
   })
 
   // ---- 壳级通知层（shell-ui-polish v3）----
-  // notify：rail 业务树 toast 请求（壳模式）→ 主进程校验/缓冲 → 覆盖层；经典模式不会触达
+  // notify：rail 业务树 toast 请求 → 主进程校验/缓冲 → 壳级通知覆盖层
   typedIpcMainHandle(IPC_CHANNELS.shell.notify, (_, payload) => ({ ok: pushNotice(payload) }))
   typedIpcMainHandle(IPC_CHANNELS.shell.noticeReady, () => {
     if (!isShellUIEnabled()) return

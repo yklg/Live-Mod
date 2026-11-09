@@ -1,5 +1,5 @@
 // utils/windowManager.js
-import type { BrowserWindow, WebContents } from 'electron'
+import type { WebContents } from 'electron'
 import type { IpcChannels } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 
@@ -58,7 +58,6 @@ export type WindowManagerDeps = {
 }
 
 export class WindowManager {
-  private mainWindow?: BrowserWindow
   /** 壳容器模式（Phase 2）：React 应用迁移出主窗口 webContents，main→renderer 推送改路由到具名目标。
    *  ui = 业务树（v3 分栏 panelView / 光圈式 railView）；chrome = 壳顶栏入口；
    *  notice = 壳级通知覆盖层（shell-ui-polish v3，全窗透明 HUD）。 */
@@ -76,15 +75,6 @@ export class WindowManager {
   constructor(deps: WindowManagerDeps = {}) {
     this.now = deps.now ?? Date.now
     this.writeStderr = deps.writeStderr ?? ((line: string) => void process.stderr.write(line))
-  }
-
-  setMainWindow(win: BrowserWindow) {
-    this.mainWindow = win
-
-    // 自动清理引用
-    win.on('closed', () => {
-      this.mainWindow = undefined
-    })
   }
 
   setUITarget(wc: WebContents) {
@@ -106,7 +96,6 @@ export class WindowManager {
 
   /** 仅测试用：清空全部状态（单例跨用例复用时不残留） */
   resetForTest() {
-    this.mainWindow = undefined
     this.targets = {}
     this.pending = {}
     this.failureStreak = 0
@@ -152,8 +141,8 @@ export class WindowManager {
       delete this.targets[target]
     }
 
-    // 关键：**不再回退到 mainWindow.webContents**。壳模式下主窗口是不加载内容的纯容器，
-    // 回退只会让事件静默进黑洞且无任何错误信号（P0-3）。
+    // 关键：**不做任何隐式回退**（历史缺陷 P0-3：曾回退到主窗口 webContents，而壳模式下主窗口
+    // 是不加载内容的纯容器，事件会静默进黑洞且无任何错误信号）。
     this.enqueue(target, String(channel), args as unknown[])
     return false
   }

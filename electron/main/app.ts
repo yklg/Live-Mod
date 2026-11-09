@@ -90,16 +90,16 @@ const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
-  // 光圈式壳形态（guangquan-shell-ui-parity v3）：自定义标题栏跨平台分档；经典模式保持原生 frame 零变化
-  const shellUiMode = process.env.LM_SHELL_UI === '1'
+  // 光圈式壳形态（guangquan-shell-ui-parity v3）：壳 UI 是唯一运行形态（经典模式已移除），
+  // 自定义标题栏跨平台分档：Windows 无边框 + 自绘，macOS 隐藏标题栏 + 红绿灯内缩。
   win = new BrowserWindow({
     title: `Live Mod - v${app.getVersion()}`,
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 700,
-    ...(shellUiMode && process.platform === 'win32' ? { frame: false } : {}),
-    ...(shellUiMode && process.platform === 'darwin'
+    ...(process.platform === 'win32' ? { frame: false } : {}),
+    ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 12, y: 13 } }
       : {}),
     // 内容首帧就绪前不显示窗口（配合下方 ready-to-show），消除启动闪屏
@@ -109,9 +109,9 @@ async function createWindow() {
     autoHideMenuBar: app.isPackaged,
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
+      // 容器自身 webContents 不加载内容（React 应用在各 WebContentsView 中），preload 仅供
+      // 壳入口视图复用同源注入口径；容器上不传 --lm-view（壳视图身份由 viewHost 各自注入）。
       preload,
-      // 经典入口视图标识（壳模式同步判定契约：preload 读 --lm-view；经典 = index）
-      additionalArguments: ['--lm-view=index'],
       // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
       // nodeIntegration: true,
       nodeIntegration: process.env.NODE_ENV === 'development',
@@ -120,8 +120,6 @@ async function createWindow() {
       // contextIsolation: false,
     },
   })
-
-  windowManager.setMainWindow(win)
 
   // 内容就绪后再显示；主框架加载失败或渲染进程早期崩溃时兜底显示，避免窗口永久隐藏
   win.once('ready-to-show', () => {
@@ -134,8 +132,9 @@ async function createWindow() {
     if (win && !win.isDestroyed() && !win.isVisible()) win.show()
   })
 
-  if (process.env.LM_SHELL_UI === '1') {
-    // Phase 2 单窗口壳形态：主窗口变纯容器，React 应用迁移至 panelView
+  // 壳 UI 是唯一运行形态：主窗口只作容器，React 应用与官方页均在 WebContentsView 中。
+  // 失败兜底（P0）：attachContainer 抛错时若不显式提示，用户只会看到白窗且无任何线索。
+  try {
     const { attachContainer } = await import('./windows/shellUI')
     attachContainer(
       win,
@@ -143,27 +142,14 @@ async function createWindow() {
       preload,
     )
     win.show()
-    // 更新检查改挂 panelView 首帧（容器自身 webContents 不加载内容，did-finish-load 不触发）
+    // 更新检查挂容器首帧（容器自身 webContents 不加载内容，did-finish-load 不触发）
     updateManager.silentCheckForUpdate().catch(() => {})
-  } else {
-    // 经典模式：显式登记 'ui' 目标。windowManager 已删除"回退到主窗口"的隐式行为（P0-3），
-    // 不登记的话所有业务推送都会被判为「目标未就绪」—— 关键事件只能靠待发队列兜 30s。
-    windowManager.setUITarget(win.webContents)
-    if (VITE_DEV_SERVER_URL) {
-      // #298
-      win.loadURL(VITE_DEV_SERVER_URL)
-      // Open devTool if the app is not packaged
-      win.webContents.openDevTools()
-    } else {
-      win.loadFile(indexHtml)
-    }
-  }
-
-  // 加载完成后检查更新（经典模式；壳容器模式见上方 panelView 分支）
-  if (process.env.LM_SHELL_UI !== '1') {
-    win.webContents.on('did-finish-load', async () => {
-      await updateManager.silentCheckForUpdate()
-    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    createLogger('ShellUI').error('壳容器初始化失败：', e)
+    dialog.showErrorBox('Live Mod 启动失败', `壳容器初始化失败：${message}`)
+    app.quit()
+    return
   }
 
   // Make all links open with the browser, not with the application
@@ -172,7 +158,7 @@ async function createWindow() {
     return { action: 'deny' }
   })
 
-  // 当返回最新 providers 时推送到渲染进程（经 windowManager 路由，兼容壳容器模式）
+  // 当返回最新 providers 时推送到渲染进程（经 windowManager 路由到 rail 业务树，壳模式唯一目标）
   emitter.on('providers-updated', providers => {
     windowManager.send(IPC_CHANNELS.app.providersUpdated, providers)
   })

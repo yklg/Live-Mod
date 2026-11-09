@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### 🚀 Features
+
+- 壳 UI 成为唯一运行形态（移除经典模式）：删除经典启动分支 / `LM_SHELL_UI` 开关 / 经典独立壳窗口承载档 / 「壳模式（实验）」设置开关。应用启动即为光圈式壳容器（chrome 顶栏 + rail 业务树 + entry 平台选择器 + notice 通知覆盖层 + 壳内 Tab 承载官方页），连接默认走壳内 attach（抖音系白名单：douyin / buyin / eos），「强制外部浏览器（调试用）」为唯一连接方式逃生口
+- 壳容器启动失败兜底：`attachContainer` 抛错时弹显式错误框并退出（此前只表现为白窗、无任何提示），日志经 `ShellUI` scope 落盘
+- 工程：E2E `poc/shell/e2e-panel-density.mjs` 移除 M8 经典零变化断言与 `LM_SHELL_UI` 注入
+
+### 🐞 Bug Fixes
+
+- 修复经典「壳模式（实验）」下百应/抖店 attach 登录必然失败并自动降级外部浏览器：经典壳窗口档把 `window.open` allow 成 Electron 子窗口但未声明 `outlivesOpener`，平台 `login` 关闭旧页（壳窗口）时登录弹窗页被连带销毁 → `page.waitForSelector: Target page ... has been closed` → F3 降级 launch。经典窗口档已随经典模式移除，壳 UI 的 pageView + `popupIntent` 折叠语义成为唯一登录链路
+- 移除误导性幻影守卫：`pageCloseGuard` 依赖 Electron 不存在的 `did-request-close` 事件（Electron 36 类型定义与二进制均 0 命中），实际从未生效；页面 `window.close()` 对非脚本打开的 pageView 本就被 Chromium 忽略，删除该死代码
+
+### ⚠️ 契约变更（开源 fork 注意）
+
+- 删除 `LM_SHELL_UI` 环境变量（原经典 / 壳模式切换）；旧账号设置 `chrome-config.shellMode`（经典模式「壳模式（实验）」）不再读取，升级后自动失效（无需数据迁移，连接改由主进程白名单默认层裁决）
+- 经典模式专属入口（主窗内置侧栏 / 底部日志面板 / 主窗右键开发者菜单）随经典模式下线；壳 UI 的 rail 业务树不包含这些入口
+
 ## v1.8.1
 
 ### 🐞 Bug Fixes

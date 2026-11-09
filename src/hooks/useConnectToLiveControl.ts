@@ -40,10 +40,8 @@ export function useConnectToLiveControl() {
   const { setIsConnected, setPlatform } = useCurrentLiveControlActions()
   const chromePath = useCurrentChromeConfig(context => context.path)
   const storageState = useCurrentChromeConfig(context => context.storageState)
-  const shellMode = useCurrentChromeConfig(context => context.shellMode ?? false)
   const forceExternal = useCurrentChromeConfig(context => context.forceExternal ?? false)
   const headless = useCurrentChromeConfig(context => context.headless)
-  const uiStatus = useShellUiStatus()
   const { toast } = useToast()
 
   const connectLiveControl = useMemoizedFn(
@@ -64,9 +62,7 @@ export function useConnectToLiveControl() {
           headless,
           chromePath,
           storageState,
-          uiStatus,
           forceExternal,
-          shellMode,
         })
         const result = await window.ipcRenderer.invoke(
           IPC_CHANNELS.tasks.liveControl.connect,

@@ -1,5 +1,6 @@
 // 弹窗决策（seamless-fix v3 · A1；fix-shell-popup-navigation-liveend Phase 2 重构）——
-// 纯函数，shellUI(view 档) 与 shellWindowManager(window 档) 共同消费。
+// 纯函数，壳 UI 的 view 档（pageView）消费。历史 window 档（经典模式独立壳窗口）已随经典模式移除；
+// carrier:'window' 分支保留仅为分类语义完整性与单测回归，当前无生产调用方。
 //
 // Phase 2 语义修正（架构级）：官方页 window.open 的本意是「打开新上下文」。
 // view 档不再把业务弹窗折叠进当前页（fold 会劫持唯一的会话 Page，触发误判下播），
@@ -7,8 +8,7 @@
 // 登录等确实需要同页导航的自动化链路，由会话层通过 windows/popupIntent 显式声明，
 // 决策层不按 URL 猜测（平台知识只经 ownedOrigins 注入，A5 边界不变）。
 //
-// 双承载体策略并存属平台约束驱动（view 弹窗销毁 webContents / window 无此问题），
-// 见 shellWindowManager A3 注释互引；Phase 3 末裁决窗口模式退役前禁止"统一化"误改。
+// view 档不 allow 真窗口（会销毁 webContents），业务弹窗统一由壳层新 Tab 承载。
 export type PopupCarrier = 'view' | 'window'
 export type PopupDecision = 'deny-selfdup' | 'new-tab' | 'external' | 'allow'
 

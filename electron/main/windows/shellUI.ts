@@ -38,7 +38,6 @@ import {
   getNoticeWindowDebug,
   getNoticeWindowWebContents,
 } from './noticeWindow'
-import { preventPageInitiatedClose } from './pageCloseGuard'
 import { clampZoom, nextZoom, ZOOM_DEFAULT, ZOOM_STEP, zoomPercent, zoomStoreKey } from './pageZoom'
 import { createPanelController } from './panelController'
 import {
@@ -63,8 +62,6 @@ let container: BrowserWindow | null = null
 let chromeView: WebContentsView | null = null
 let railView: WebContentsView | null = null
 
-let enabled = false
-
 interface RealTabView extends TabView {
   real: WebContentsView
 }
@@ -77,8 +74,13 @@ let panel = createPanelController({
   pushRail: () => {},
 })
 
+/**
+ * 壳 UI 是否启用：经典模式已移除 ⇒ 恒为 true。
+ * 保留函数口径是因为调用方（连接模式裁决/壳 IPC/入口视图）仍以「形态能力」而非硬编码表达，
+ * 未来若有第二形态（如无头/MAS）可在此单点扩展。
+ */
 export function isShellUIEnabled() {
-  return enabled
+  return true
 }
 
 export function getContainer(): BrowserWindow | null {
@@ -196,7 +198,6 @@ export function attachContainer(
   entry: { url?: string; file?: string },
   preloadPath: string,
 ) {
-  enabled = true
   container = win
 
   chromeView = makeAppView(preloadPath, 'chrome')
@@ -332,8 +333,8 @@ export function attachContainer(
         }
         return { action: 'deny' }
       })
-      // 一道防线足够：did-request-close 拒绝页面发起的 view 销毁（A0 实证 allow 弹窗才是死因，非 close）
-      preventPageInitiatedClose(view.webContents, m => logger.warn(m))
+      // 注：页面发起 window.close() 对非脚本打开的 pageView 本就被 Chromium 忽略（无窗口可关），
+      // 无需额外守卫；历史 pageCloseGuard 依赖的 did-request-close 在 Electron 36 不存在（幻影 API），已移除。
       const wrapper: RealTabView = {
         real: view,
         webContents: makeTabWebContentsFacade(view.webContents),
@@ -425,7 +426,6 @@ export function attachContainer(
     chromeView = null
     railView = null
     tabManager = null
-    enabled = false
     windowManager.clearUITarget()
   })
 

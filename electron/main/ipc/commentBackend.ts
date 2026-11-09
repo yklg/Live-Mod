@@ -1,4 +1,4 @@
-// B2 评论后端 IPC：壳 rail / 经典主窗口查询后端状态与历史（事件推送走 windowManager.send → 'ui'）
+// B2 评论后端 IPC：壳 rail 查询后端状态与历史（事件推送走 windowManager.send → rail 业务树）
 //
 // W2 变更：
 //   1. 来源授权交给 utils/ipc 的 CHANNEL_TRUST 声明表（删掉手写 `assertRailSender`——
