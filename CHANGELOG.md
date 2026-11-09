@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.10.0
+
+[compare changes](https://github.com/yklg/Live-Mod/compare/v1.9.0...v1.10.0)
+
+### 🚀 Features
+
+- **ui:** 建立暖中性设计令牌与高密度视觉基线 ([7890945](https://github.com/yklg/Live-Mod/commit/7890945))
+- **shell:** 工作台化壳并收敛 AI 为全局浮窗 ([2c3ff67](https://github.com/yklg/Live-Mod/commit/2c3ff67))
+- **shell:** 第二期工作台壳与账号/场次单一源 ([4c4aa0c](https://github.com/yklg/Live-Mod/commit/4c4aa0c))
+
 ## Unreleased
 
 ## v1.9.0
