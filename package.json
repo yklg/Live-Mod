@@ -1,7 +1,7 @@
 {
   "name": "live-mod",
   "type": "module",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "private": true,
   "productName": "Live Mod",
   "description": "Live Mod —— 直播带货工具，支持自动弹窗、自动发言、自动回复与 AI 助手",

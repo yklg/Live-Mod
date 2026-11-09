@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.8.1
+
 ### 🐞 Bug Fixes
 
 - 修复 macOS 发布包打开提示「已损坏，无法打开」：electron-builder 在没有 Apple Developer 证书时会跳过签名，产物只有 Electron 自带的 linker-signed（bundle 未绑定、无 `_CodeSignature/CodeResources`），macOS 15 的 Gatekeeper / LaunchServices 直接拒绝——即使 `xattr -cr` 清掉 quarantine，LaunchServices 启动仍会在 0.1s 内静默退出（v1.8.0 实测）。现新增 `scripts/afterPackSignMac.mjs`，打包后对 `.app` 做 **ad-hoc 签名**（配置 Developer ID 证书时，后续正式签名会覆盖本次签名），`codesign --verify --deep --strict` 通过、清掉隔离标记后双击可正常启动；README 补充 macOS 下载安装与首次打开说明
