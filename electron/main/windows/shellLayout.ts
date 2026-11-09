@@ -1,7 +1,6 @@
-// 壳布局几何唯一真源（guangquan-shell-ui-parity v3 · A3）——纯函数，零 Electron import。
-// 范式沿用 popupPolicy/foldNavigate/pageFactory「纯决策函数 + 薄执行壳」：
-// shellUI/panelController 只消费本函数产出的 bounds 做 setBounds，禁止在别处算几何。
-// 测试锚：shellLayout.test.ts TC-L1~L13（决策表/边界/不变量/纯性）。
+// 壳布局几何唯一真源（第二期工作台）：纯函数，零 Electron import。
+// 模式：workbench（52px 顶栏 + 232 左栏）/ live（52+36 + 56 左栏）/ browse（52+36+36 + 56 左栏）。
+// 约束：page bounds 只由本函数产出；dock 模式让出宽度，overlay 模式 page bounds 不变。
 
 export interface Bounds {
   x: number
@@ -10,39 +9,63 @@ export interface Bounds {
   height: number
 }
 
+export type WorkspaceMode = 'workbench' | 'live' | 'browse'
+
 export interface ShellBounds {
   chrome: Bounds
+  workspace: Bounds
   rail: Bounds
   page: Bounds | null
 }
 
-export const CHROME_H = 88 // 40 Tab 行 + 48 工具行（快捷条已收进工具行）
-export const RAIL_W = 56 // 收起态图标条宽
-// 面板宽度 = 纯产品参数（遮挡面积），**布局不依赖该值**：面板树用容器查询 @xl/panel 适配，
-// 因此 600/800 均可；旧 800 曾用于补偿 CSS md(768) 断点（视口=面板宽度），容器化后不再需要。
-export const PANEL_W = 600
-export const PANEL_MIN = 420
-export const PANEL_MAX = 880
-// overlay 下至少留给官方页的可视宽度；与 PAGE_MIN（pageView 最小宽）不是同一语义，禁止复用。
-export const PANEL_VISIBLE_MIN = 320
-export const PAGE_MIN = 640 // A0 门禁实证官方页可用宽度
-// 降级阈值：默认宽度下的历史阈值；实际按当前 panelWidth + RAIL_W 计算（见 degradeThreshold）。
-export const DEGRADE_W = PANEL_W + RAIL_W
+export const TOPBAR_H = 52
+export const BROWSER_BAR_H = 36
+export const TABSTRIP_H = 36
+export const LEFT_W = 232
+export const LEFT_COMPACT_W = 56
+export const RAIL_W = 56
 
-/** 当前面板宽度下的降级阈值：winW 小于它时面板无法以 overlay 宽度放下。 */
-export function degradeThreshold(panelWidth: number = PANEL_W): number {
-  return panelWidth + RAIL_W
+export const DOCK_MIN = 320
+export const DOCK_W = 360
+export const DOCK_MAX = 420
+
+// 兼容第一期命名：面板宽度已收敛为 dock 宽度。
+export const PANEL_MIN = DOCK_MIN
+export const PANEL_W = DOCK_W
+export const PANEL_MAX = DOCK_MAX
+
+export const PAGE_MIN = 640 // 官方页不重排的既有门禁
+export const PANEL_VISIBLE_MIN = 320 // overlay 可见页硬下限
+
+// 第一期 live 模式总高（52 产品顶栏 + 36 工具条）；保留给 notice/entry 过渡。
+export const CHROME_H = TOPBAR_H + BROWSER_BAR_H
+/** @deprecated 使用 chromeHeight(mode)；保留旧导出避免过渡期漏改。 */
+export const DEGRADE_W = DOCK_W + RAIL_W
+/** @deprecated 使用 PAGE_MIN + LEFT_COMPACT_W + RAIL_W。 */
+export const MIN_WIN_WIDTH = PAGE_MIN + LEFT_COMPACT_W + RAIL_W
+
+export function chromeHeight(mode: WorkspaceMode): number {
+  if (mode === 'workbench') return TOPBAR_H
+  if (mode === 'browse') return TOPBAR_H + BROWSER_BAR_H + TABSTRIP_H
+  return TOPBAR_H + BROWSER_BAR_H
 }
 
-/** 面板宽度钳制：先保证 PANEL_VISIBLE_MIN，再受 PANEL_MAX 约束；非数回默认。 */
-export function clampPanelWidth(requested: number, winW: number): number {
-  const value = Number.isFinite(requested) ? requested : PANEL_W
-  const maxByWindow = winW - RAIL_W - PANEL_VISIBLE_MIN
-  const upper = Math.max(PANEL_MIN, Math.min(PANEL_MAX, maxByWindow))
-  return Math.round(Math.min(upper, Math.max(PANEL_MIN, value)))
+/** dock 是否放得下：必须同时保住 pageView 的 PAGE_MIN，避免官方页重排。 */
+export function dockFits(winW: number, dockWidth: number = DOCK_W): boolean {
+  return winW - LEFT_COMPACT_W - dockWidth - RAIL_W >= PAGE_MIN
 }
 
-/** 拖拽导体的纯宽度算术：向左拖（screenX 减小）变宽，向右拖变窄。 */
+export function clampDockWidth(requested: number): number {
+  const value = Number.isFinite(requested) ? requested : DOCK_W
+  return Math.round(Math.min(DOCK_MAX, Math.max(DOCK_MIN, value)))
+}
+
+/** @deprecated 兼容第一期调用点；winW 参数不再参与静态钳制。 */
+export function clampPanelWidth(requested: number, _winW?: number): number {
+  return clampDockWidth(requested)
+}
+
+/** 拖拽导体纯算术：向左拖变宽。 */
 export function draggedPanelWidth(
   startWidth: number,
   startScreenX: number,
@@ -50,58 +73,82 @@ export function draggedPanelWidth(
 ): number {
   return startWidth + startScreenX - screenX
 }
-// 历史阈值（未接入运行时；实际窗口下限由 app.ts minWidth=1024 控制），仅保留纯函数性质测试。
-export const MIN_WIN_WIDTH = PAGE_MIN + RAIL_W
+
+/** @deprecated 旧阈值；dock 模式改用 dockFits。 */
+export function degradeThreshold(panelWidth: number = DOCK_W): number {
+  return LEFT_COMPACT_W + clampDockWidth(panelWidth) + RAIL_W
+}
 
 export interface ShellLayoutInput {
   winW: number
   winH: number
-  panelOpen: boolean
-  activeTabPresent: boolean
-  /** 当前面板宽度；缺省 PANEL_W（旧调用点零变化）。 */
+  mode?: WorkspaceMode
+  dockOpen?: boolean
+  dockWidth?: number
+  /** 第一期兼容：等价 dockOpen。 */
+  panelOpen?: boolean
+  /** 第一期兼容：等价 dockWidth。 */
   panelWidth?: number
+  activeTabPresent: boolean
 }
 
 /**
- * 计算三 view 的完整 bounds（chrome 顶栏恒全宽；rail 右缘常驻；page 铺满 chrome 下方剩余区）。
- * overlay 语义：面板展开只改 rail bounds，page bounds 与收起态逐键相同（TC-L11）。
- * 降级规则：winW < 当前 panelWidth + RAIL_W 时 rail 全宽覆盖（跟随实际宽度，而非固定 600）。
+ * 计算壳各视图 bounds。
+ * - workbench：workspace 宽 232，page=null（首页覆盖页面区）。
+ * - live/browse：workspace 56；dock 打开且放得下 → page 让出 dock+rail；否则 overlay（page 不变）。
+ * - overlay：rail 浮在 page 右侧，page 宽度只扣 workspace+rail。
  */
 export function computeShellBounds({
   winW,
   winH,
+  mode = 'live',
+  dockOpen,
+  dockWidth,
   panelOpen,
-  activeTabPresent,
   panelWidth,
+  activeTabPresent,
 }: ShellLayoutInput): ShellBounds {
-  const chrome: Bounds = { x: 0, y: 0, width: winW, height: CHROME_H }
+  const height = winH - chromeHeight(mode)
+  const bodyY = chromeHeight(mode)
+  const chrome: Bounds = { x: 0, y: 0, width: winW, height: chromeHeight(mode) }
+  // workspace 视图：工作台占满「右栏条」左侧（内部再分 232 左栏 + 主区）；live/browse 只留 56 图标栏。
+  const workspaceW = mode === 'workbench' ? winW - RAIL_W : LEFT_COMPACT_W
+  const pageX = LEFT_COMPACT_W
+  const workspace: Bounds = { x: 0, y: bodyY, width: workspaceW, height }
 
-  const bodyY = CHROME_H
-  const bodyH = winH - CHROME_H
-  const width = clampPanelWidth(panelWidth ?? PANEL_W, winW)
+  const open = dockOpen ?? panelOpen ?? false
+  const width = clampDockWidth(dockWidth ?? panelWidth ?? DOCK_W)
+  const effectiveOpen = open && mode !== 'workbench'
+  const pagePresent = activeTabPresent && mode !== 'workbench'
+  const fits = effectiveOpen && dockFits(winW, width)
 
   let rail: Bounds
-  if (!panelOpen) {
-    rail = { x: winW - RAIL_W, y: bodyY, width: RAIL_W, height: bodyH }
-  } else if (winW >= degradeThreshold(width)) {
-    rail = { x: winW - width, y: bodyY, width, height: bodyH }
+  let page: Bounds | null
+  if (!effectiveOpen) {
+    rail = { x: winW - RAIL_W, y: bodyY, width: RAIL_W, height }
+    page = pagePresent ? { x: pageX, y: bodyY, width: winW - pageX - RAIL_W, height } : null
+  } else if (fits) {
+    rail = { x: winW - width - RAIL_W, y: bodyY, width: width + RAIL_W, height }
+    page = pagePresent ? { x: pageX, y: bodyY, width: winW - pageX - width - RAIL_W, height } : null
   } else {
-    rail = { x: 0, y: bodyY, width: winW, height: bodyH }
+    // overlay：page 保持与收起态相同，rail 覆盖在 page 右侧。
+    rail = { x: winW - width - RAIL_W, y: bodyY, width: width + RAIL_W, height }
+    page = pagePresent ? { x: pageX, y: bodyY, width: winW - pageX - RAIL_W, height } : null
   }
 
-  const page: Bounds | null = activeTabPresent
-    ? { x: 0, y: bodyY, width: winW - RAIL_W, height: bodyH }
-    : null
-
-  return { chrome, rail, page }
+  return { chrome, workspace, rail, page }
 }
 
-/**
- * 壳入口选择器视图 bounds（shell-entry-platform-selector v1）：
- * 覆盖「页面区」——chrome 下、常驻 rail 图标条左侧。与 page bounds 同形但**不依赖活跃 Tab**
- * （入口出现时页面可能尚未建/已关闭）。notice 通知层为独立透明窗口（需窗口级点击穿透），
- * 不复用本视图几何——两者定位方式不同，见 windows/noticeWindow.ts。
- */
-export function computeEntryBounds({ winW, winH }: { winW: number; winH: number }): Bounds {
-  return { x: 0, y: CHROME_H, width: winW - RAIL_W, height: winH - CHROME_H }
+/** 入口/首页覆盖页面区：chrome 下、rail 左侧；入口过渡期仍使用。 */
+export function computeEntryBounds({
+  winW,
+  winH,
+  mode = 'live',
+}: {
+  winW: number
+  winH: number
+  mode?: WorkspaceMode
+}): Bounds {
+  const y = chromeHeight(mode)
+  return { x: 0, y, width: winW - RAIL_W, height: winH - y }
 }

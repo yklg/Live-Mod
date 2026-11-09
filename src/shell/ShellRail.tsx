@@ -113,7 +113,8 @@ export function ShellRailRoot() {
             e.preventDefault()
             void window.ipcRenderer.invoke(
               IPC_CHANNELS.shell.panelDragBegin,
-              window.innerWidth,
+              // rail 视图宽 = dock 宽 + 56 图标条；导体只接受 dock 宽。
+              Math.max(0, window.innerWidth - 56),
               e.screenX,
             )
           }}

@@ -1,6 +1,6 @@
 # UI 风格规范（Live Mod 壳界面）
 
-> 2026-11-09 按第一期计划更新。组件按批次迁移；未迁移处暂以现有实现为准。
+> 2026-11-10 按第二期工作台计划更新壳体几何与 dock 规范；未迁移处暂以现有实现为准。
 > 规则：新增/修改 UI 一律对照本文件；不引入新配色、新圆角体系或新图标库；默认禁用 emoji 作为图标/装饰。
 
 ## 1. 颜色令牌（唯一来源 `src/index.css`）
@@ -54,11 +54,12 @@
 
 ## 8. 壳界面几何
 
-- 顶栏：`CHROME_H=88`（40 Tab 行 + 48 工具行）；窗口最小宽 1024
+- 顶栏三行：产品顶栏 `TOPBAR_H=52`；浏览器工具条 `BROWSER_BAR_H=36`（仅 live/browse）；标签行 `TABSTRIP_H=36`（仅 browse）。总高 workbench 52 / live 88 / browse 124；窗口最小宽 1024
+- 左栏：工作台 `LEFT_W=232`（账号/最近场次）；live/browse `LEFT_COMPACT_W=56` 图标栏
 - 右栏图标条：`RAIL_W=56`；**7 项业务图标（不含 AI）**
-- 功能面板：`PANEL_MIN=420`、默认 `600`、`PANEL_MAX=min(880, winW - RAIL_W - PANEL_VISIBLE_MIN)`
-- `PANEL_VISIBLE_MIN=320`（待 1024 真机验证；重排则抬到 400）；与 `PAGE_MIN` 分义，禁止复用
-- 面板是 overlay：展开不压缩官方页宽度；宽度只改变遮挡面积；保留「让出右侧看网页」
+- dock：`DOCK_MIN=320`、默认 `360`、`DOCK_MAX=420`；宽度持久化（LayoutStore v2）
+- dock 模式让出官方页宽度；`dockFits` 以 `PAGE_MIN=640` 为门槛（360→1112、420→1172，1024 一律 overlay）；overlay 下 page bounds 不变，`PANEL_VISIBLE_MIN=320` 保留为可见页硬下限
+- 中控是常驻表面：`kind:'account'` 的账号 Tab 不进标签行、不可由 UI 关闭；标签行只显示自由浏览的 free/popup Tab
 - AI 助手：全局浮窗，默认 520×640、最小 400×440、边距 12、吸附 20/28；顶栏 sparkle + `⌘J` 开关；右栏无 AI 图标/面板；配置在浮窗「更多」
 
 ## 9. 组件复用

@@ -55,6 +55,7 @@ export interface TabInfo {
   canBack: boolean
   canForward: boolean
   active: boolean
+  kind: TabKind
 }
 
 export interface TabsState {
@@ -174,6 +175,7 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
       canBack: t.view.webContents.canGoBack(),
       canForward: t.view.webContents.canGoForward(),
       active: t.id === activeId,
+      kind: t.kind,
     })),
     activeId,
   })

@@ -1,4 +1,6 @@
-// 壳入口平台选择器 E2E（shell-entry-platform-selector v1 · EC-1~EC-5）
+// 已退役（第二期）：启动入口改为 workspace 工作台，旧平台选择器不再抢首屏。
+// 保留文件用于历史对照；新启动路径见 poc/shell/e2e-workbench.mjs。
+// 原：壳入口平台选择器 E2E（shell-entry-platform-selector v1 · EC-1~EC-5）
 // 前置：npx vite build 产出 dist + dist-electron（生产形态：entry.html/chrome.html/rail.html 三入口）
 // 契约（主进程仅 LM_SHELL_DEBUG=1 注册，生产不暴露）：
 //   app.__shellDebug(): { panelOpen, routeId, railWidth, entryVisible, entryUrl, entryBounds, expectedEntryBounds, childrenUrls }

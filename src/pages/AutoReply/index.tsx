@@ -56,7 +56,7 @@ export default function AutoReply() {
       }
     >
       {/* 评论和回复区域：填满剩余高度 */}
-      <div className="grid h-full grid-cols-2 gap-4 px-6 pb-5 @xl/panel:gap-3 @xl/panel:px-4 @xl/panel:pb-4">
+      <div className="grid h-full grid-cols-2 gap-4 px-6 pb-5 @max-[900px]/panel:gap-3 @max-[900px]/panel:px-4 @max-[900px]/panel:pb-4">
         {/* 评论列表卡片 */}
         <CommentList highlight={highlightedCommentId} />
 

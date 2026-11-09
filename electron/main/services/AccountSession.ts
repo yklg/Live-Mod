@@ -110,6 +110,11 @@ export class AccountSession {
     // 认证链路可能替换会话页（平台 login 内 browserSession.page = newPage / 无头模式换会话）：
     // 页身份观测必须绑到最终会话页，否则观测的是已废弃的登录页。
     this.observePageNavigation()
+    emitter.emit('live-session-started', {
+      accountId: this.account.id,
+      platform: this.platform.platformName,
+      startedAt: Date.now(),
+    })
 
     // launched 才保存 storageState（attach 的 Cookie 由 partition 持久化，PoC 二次免登已实证）
     if (this.browserSession.kind === 'launched') {
@@ -371,6 +376,11 @@ export class AccountSession {
       this.platform.stopLiveStatusWatch()
     }
     windowManager.send(IPC_CHANNELS.tasks.liveControl.liveEndedEvent, this.account.id)
+    emitter.emit('live-session-ended', {
+      accountId: this.account.id,
+      endedAt: Date.now(),
+      reason: 'live-ended',
+    })
     new Notification({
       title: '直播已结束',
       body: `账号「${this.account.name}」的直播已结束，所有任务已自动停止`,
@@ -407,6 +417,11 @@ export class AccountSession {
     this.activeTasks.clear()
     // 通知渲染层
     windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, this.account.id)
+    emitter.emit('live-session-ended', {
+      accountId: this.account.id,
+      endedAt: Date.now(),
+      reason: 'disconnect',
+    })
   }
 
   private async ensureAuthenticated(

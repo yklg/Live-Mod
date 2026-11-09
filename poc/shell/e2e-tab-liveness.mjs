@@ -84,6 +84,9 @@ async function main() {
         15_000,
       )
 
+    // 第二期：页面在 browse/live 才可见；最小化保活测试先进入 browse
+    await chromePage.evaluate(() => window.ipcRenderer.invoke('shell:workspaceModeSet', 'browse'))
+    await sleep(300)
     // A = 被测页；B = 后建并 active → A 进入非激活
     await createTab(`${base}/a.html`)
     const pageA = await findPage('/a.html')

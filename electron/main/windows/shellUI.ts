@@ -22,9 +22,11 @@ import {
   shell,
   WebContentsView,
 } from 'electron'
+import type { WorkspaceState } from 'shared/accounts'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { isKnownShellRouteId } from 'shared/shellRoutes'
 import { createLogger } from '#/logger'
+import { accountManager } from '#/managers/AccountManager'
 import { LAYOUT_STORE_VERSION, loadLayoutState, saveLayoutState } from '#/services/LayoutStore'
 import { loadZoomFactor, saveZoomFactor } from '#/services/ZoomStore'
 import { classifyViewUrl, setTrustResolver } from '#/utils/ipc'
@@ -37,7 +39,8 @@ import {
   isAssistantWindowVisible,
   toggleAssistantWindow,
 } from './assistantWindow'
-import { attachEntryView, destroyEntryView, getEntryDebug, relayoutEntryView } from './entryView'
+import { setChromeHeight } from './chromeMetrics'
+import { destroyEntryView, getEntryDebug, hideEntry, relayoutEntryView } from './entryView'
 import { installExternalProtocolGuard } from './externalProtocolGuard'
 import { foldNavigate } from './foldNavigate'
 import { shouldWarnLeaveControlPage } from './leaveGuard'
@@ -65,23 +68,25 @@ import {
 import { clearPopupMode, getPopupMode, setPopupMode } from './popupIntent'
 import { classifyPopup } from './popupPolicy'
 import {
-  clampPanelWidth,
+  clampDockWidth,
   computeEntryBounds,
   computeShellBounds,
+  DOCK_W,
   draggedPanelWidth,
-  PANEL_W,
 } from './shellLayout'
 import { installShellMenu } from './shellMenu'
 import { createShellTabManager, type TabView } from './shellTabManager'
 import { chromeUa } from './ua'
 import { loadAppEntry, makeAppView } from './viewHost'
+import { createWorkspaceMode } from './workspaceMode'
 
 const logger = createLogger('ShellUI')
 
-// 当前面板宽度（LayoutStore 恢复 / 拖拽导体写入；几何计算只读这个值）。
-let panelWidth = PANEL_W
+// 当前 dock 宽度（LayoutStore 恢复 / 拖拽导体写入；几何计算只读这个值）。
+let panelWidth = DOCK_W
 // 一次拖拽的起点：导体只回传 screenX，宽度算术在主进程保持单一真源。
 let panelDragStart: { width: number; screenX: number } | null = null
+const workspaceMode = createWorkspaceMode('workbench')
 // assistant 懒创建所需入口参数（首次 Cmd+J/顶栏点击才创建，避免启动期多一个窗口抢焦点/E2E firstWindow）。
 let assistantEntry: { url?: string; file?: string } | null = null
 let assistantPreloadPath: string | null = null
@@ -92,6 +97,7 @@ const FOLD_TIMEOUT_MS = 8000
 let container: BrowserWindow | null = null
 let chromeView: WebContentsView | null = null
 let railView: WebContentsView | null = null
+let workspaceView: WebContentsView | null = null
 
 interface RealTabView extends TabView {
   real: WebContentsView
@@ -101,6 +107,8 @@ let tabManager: ReturnType<typeof createShellTabManager> | null = null
 let panel = createPanelController({
   winSize: () => ({ w: 0, h: 0 }),
   hasActiveTab: () => false,
+  mode: () => workspaceMode.mode(),
+  dockWidth: () => panelWidth,
   applyBounds: () => {},
   pushRail: () => {},
 })
@@ -224,26 +232,34 @@ function installPanelToggleShortcut(wc: Electron.WebContents) {
   })
 }
 
-/** 标签键盘契约：Cmd/Ctrl+T/W/1-9、Cmd/Ctrl+Shift+T 重开；pageView 无 preload，只能主进程兜底。 */
+/** 标签键盘契约：Cmd/Ctrl+T/W/1-9、Cmd/Ctrl+Shift+T；标签只在 browse 可操作。 */
 function installTabShortcuts(wc: Electron.WebContents) {
   wc.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.meta || input.control) || !tabManager) return
     const key = input.key.toLowerCase()
+    const mode = workspaceMode.mode()
     if (key === 't') {
       event.preventDefault()
-      if (input.shift) tabManager.reopenLast()
-      else tabManager.createTab({})
+      if (input.shift) {
+        if (mode === 'browse') tabManager.reopenLast()
+        return
+      }
+      shellWorkspaceModeSet('browse')
+      tabManager.createTab({})
       return
     }
     if (key === 'w') {
       event.preventDefault()
-      const id = tabManager.state().activeId
-      if (id) tabManager.closeTab(id)
+      if (mode !== 'browse') return
+      const state = tabManager.state()
+      const active = state.tabs.find(t => t.id === state.activeId)
+      if (active && active.kind !== 'account') tabManager.closeTab(active.id)
       return
     }
     if (/^[1-9]$/.test(input.key)) {
       event.preventDefault()
-      const tabs = tabManager.state().tabs
+      if (mode !== 'browse') return
+      const tabs = tabManager.state().tabs.filter(t => t.kind !== 'account')
       const index = Number(input.key) === 9 ? tabs.length - 1 : Number(input.key) - 1
       const target = tabs[index]
       if (target) tabManager.activateTab(target.id)
@@ -270,9 +286,10 @@ export function attachContainer(
 
   chromeView = makeAppView(preloadPath, 'chrome')
   railView = makeAppView(preloadPath, 'rail')
-  // 层级铁律（P0-2 v1）：按 append 顺序建 [entry, chrome, rail]，再让 pageView mount 到 index 0 →
-  // 最终子序 [page(0), entry(1), chrome(2), rail(3)]（依赖 tabManager mount 恒 index 0 的插入语义）。
-  attachEntryView(win, entry, preloadPath)
+  workspaceView = makeAppView(preloadPath, 'workspace')
+  // 层级铁律：append [workspace, chrome, rail]，pageView mount 到 index 0 →
+  // [page(0), workspace(1), chrome(2), rail(3)]。entry 平台选择器已退场（第二期）。
+  win.contentView.addChildView(workspaceView)
   win.contentView.addChildView(chromeView)
   win.contentView.addChildView(railView)
   // 壳级通知覆盖层：独立透明子窗口（真点击穿透 + 父子窗口最顶层；视图方案无 setIgnoreMouseEvents——探针结论）
@@ -285,16 +302,17 @@ export function attachContainer(
   const noticeWc = getNoticeWindowWebContents()
   if (noticeWc) windowManager.setTarget('notice', noticeWc)
   // 壳内任意视图聚焦时 Cmd/Ctrl +/-/0 都作用于当前活跃 Tab（地址栏/入口同样可用）
-  for (const wc of [chromeView.webContents, railView.webContents]) {
+  for (const wc of [chromeView.webContents, railView.webContents, workspaceView.webContents]) {
     installZoomShortcuts(wc)
     installPanelToggleShortcut(wc)
     installTabShortcuts(wc)
     installAssistantShortcut(wc)
   }
 
-  // 业务推送目标 = railView（完整业务树，v3 的 panelView 语义迁移）；顶栏走具名 'chrome' 目标
+  // 业务推送目标 = railView（完整业务树）；workspace 独立接收账号/模式/场次快照。
   windowManager.setUITarget(railView.webContents)
   windowManager.setTarget('chrome', chromeView.webContents)
+  windowManager.setTarget('workspace', workspaceView.webContents)
 
   // IPC 来源判定：优先 webContents.id 精确比对（防 URL 伪造/视图重建后 id 变化），兜底走 URL。
   // 与 ipc/index.ts 注册的 URL 版相比，这里多了"精确身份"，但**判据不是安全边界本身** ——
@@ -303,6 +321,7 @@ export function attachContainer(
     const id = event.sender.id
     if (railView && id === railView.webContents.id) return 'rail'
     if (chromeView && id === chromeView.webContents.id) return 'chrome'
+    if (workspaceView && id === workspaceView.webContents.id) return 'workspace'
     return classifyViewUrl(event.sender.getURL())
   })
 
@@ -393,6 +412,7 @@ export function attachContainer(
           logger.warn('popup-rule=new-tab 壳容器未就绪，降级拒绝：', url.slice(0, 80))
           return { action: 'deny' }
         }
+        if (action.activate) shellWorkspaceModeSet('browse')
         const popupTabId = tabManager.createPopupTab({
           url,
           partition: opts.partition,
@@ -457,15 +477,19 @@ export function attachContainer(
       return { w, h }
     },
     hasActiveTab: () => tabManager?.hasActiveTab() ?? false,
-    panelWidth: () => panelWidth,
+    mode: () => workspaceMode.mode(),
+    dockWidth: () => panelWidth,
     applyBounds: b => {
+      setChromeHeight(b.chrome.height)
       if (chromeView) chromeView.setBounds(b.chrome)
       if (railView) railView.setBounds(b.rail)
+      if (workspaceView) workspaceView.setBounds(b.workspace)
       tabManager?.applyPageBounds(b.page)
       if (container && !container.isDestroyed()) {
         const [w, h] = container.getContentSize()
-        relayoutEntryView(computeEntryBounds({ winW: w, winH: h }))
+        relayoutEntryView(computeEntryBounds({ winW: w, winH: h, mode: workspaceMode.mode() }))
       }
+      pushWorkspaceState()
     },
     pushRail: s => {
       windowManager.sendTo('ui', IPC_CHANNELS.shell.railState, s)
@@ -485,6 +509,7 @@ export function attachContainer(
   // 入口加载放在 tabManager 就绪之后：chrome 首帧 invoke(tabsList) 不再撞「壳容器未就绪」
   loadAppEntry(chromeView, entry, 'chrome')
   loadAppEntry(railView, entry, 'rail')
+  if (workspaceView) loadAppEntry(workspaceView, entry, 'workspace')
 
   // 壳模式自定义菜单：缩放快捷键作用于壳内活跃 Tab（默认菜单 Zoom 角色对 WebContentsView 无效）
   installShellMenu({
@@ -505,11 +530,13 @@ export function attachContainer(
     container = null
     chromeView = null
     railView = null
+    workspaceView = null
     tabManager = null
+    windowManager.clearTarget('workspace')
     windowManager.clearUITarget()
   })
 
-  logger.success('壳容器已绑定（光圈式：chrome/rail/entry 三入口 + Tab 归属）')
+  logger.success('壳容器已绑定（第二期：workspace/chrome/rail + Tab 归属）')
 }
 
 // ==================== 对外 facade（ipc/shell.ts、shellWindowManager、ipc/app.ts 消费） ====================
@@ -583,10 +610,66 @@ export function shellTabReload(id: number) {
   requireTabs().reload(id)
 }
 
-/** 面板开合唯一入口（A2）：chrome「展开」与 rail 图标/ESC 同走此处 */
+/** 面板开合唯一入口（A2）：chrome「展开」与 rail 图标/ESC 同走此处；工作台点业务图标 = 进 live + 开 dock。 */
 export function shellRailToggle(routeId?: string | null) {
+  if (workspaceMode.mode() === 'workbench' && routeId) {
+    shellWorkspaceOpenPanel(routeId)
+    return
+  }
   panel.toggle(routeId ?? null)
   persistLayout()
+}
+
+/** workspace 模式快照（workspace/chrome/rail 共用）。 */
+export function shellWorkspaceSnapshot(): WorkspaceState {
+  return {
+    mode: workspaceMode.mode(),
+    dockOpen: panel.isOpen(),
+    dockWidth: panelWidth,
+    connectedAccountIds: [...accountManager.accountSessions.keys()],
+  }
+}
+
+function pushWorkspaceState() {
+  const state = shellWorkspaceSnapshot()
+  windowManager.sendTo('workspace', IPC_CHANNELS.shell.workspaceState, state)
+  windowManager.sendTo('chrome', IPC_CHANNELS.shell.workspaceState, state)
+  windowManager.sendTo('ui', IPC_CHANNELS.shell.workspaceState, state)
+}
+
+export function shellWorkspaceModeSet(mode: WorkspaceState['mode']) {
+  if (!workspaceMode.set(mode)) return
+  hideEntry()
+  if (mode === 'live' && tabManager) {
+    const tabs = tabManager.state().tabs
+    const account = tabs.find(t => t.kind === 'account')
+    if (account) tabManager.activateTab(account.id)
+    else if (tabs.length === 0) tabManager.createTab({})
+  }
+  if (mode === 'browse' && tabManager) {
+    const tabs = tabManager.state().tabs
+    const free = tabs.find(t => t.kind !== 'account')
+    if (free) tabManager.activateTab(free.id)
+    else tabManager.createTab({})
+  }
+  panel.resize()
+  pushWorkspaceState()
+}
+
+/** 工作台右栏/最近场次：进 live + 开 dock + route 一次完成。 */
+export function shellWorkspaceOpenPanel(routeId?: string | null) {
+  workspaceMode.set('live')
+  hideEntry()
+  panel.open(routeId ?? null)
+  pushWorkspaceState()
+  persistLayout()
+}
+
+/** 账号移除/显式销毁：只有这里关 account Tab（live surface 的 disposeSurface）。 */
+export function shellCloseAccountTab(accountId: string) {
+  if (!tabManager) return
+  const id = tabManager.tabIdForAccount(accountId)
+  if (id != null) tabManager.closeTab(id)
 }
 
 function persistLayout() {
@@ -594,8 +677,8 @@ function persistLayout() {
   try {
     saveLayoutState({
       version: LAYOUT_STORE_VERSION,
-      panelWidth,
-      panelOpen: panel.isOpen(),
+      dockWidth: panelWidth,
+      dockOpen: panel.isOpen(),
       routeId: isKnownShellRouteId(route) ? route : null,
     })
   } catch (error) {
@@ -603,32 +686,26 @@ function persistLayout() {
   }
 }
 
-/** railReady 后恢复布局：宽度先应用，再用已知 route 打开面板；未知 route 视为收起。 */
+/** railReady 后恢复布局：宽度先应用，再用已知 route 打开 dock；未知 route 视为收起。 */
 export function shellRestoreLayout() {
   const saved = loadLayoutState()
-  if (container && !container.isDestroyed()) {
-    const [w] = container.getContentSize()
-    panelWidth = clampPanelWidth(saved.panelWidth, w)
-  }
-  if (saved.panelOpen && saved.routeId) panel.toggle(saved.routeId)
+  panelWidth = clampDockWidth(saved.dockWidth)
+  if (saved.dockOpen && saved.routeId) panel.open(saved.routeId)
   else panel.resize()
 }
 
 /** 拖拽开始（rail 视图 pointerdown → 主进程）：记录起点并显示透明导体。 */
 export function shellPanelDragBegin(startWidth: number, startScreenX: number) {
   if (!container || container.isDestroyed() || !panel.isOpen()) return
-  const [w] = container.getContentSize()
-  panelDragStart = { width: clampPanelWidth(startWidth, w), screenX: startScreenX }
+  panelDragStart = { width: clampDockWidth(startWidth), screenX: startScreenX }
   if (!showPanelDragWindow()) logger.warn('面板拖拽导体未就绪，本次拖拽降级为无操作')
 }
 
 /** 导体回传 screenX：宽度算术与钳制都在主进程，渲染层不持几何真源。 */
 export function shellPanelResize(screenX: number) {
   if (!panelDragStart || !container || container.isDestroyed()) return
-  const [w] = container.getContentSize()
-  const width = clampPanelWidth(
+  const width = clampDockWidth(
     draggedPanelWidth(panelDragStart.width, panelDragStart.screenX, screenX),
-    w,
   )
   if (width === panelWidth) return
   panelWidth = width
@@ -676,11 +753,18 @@ function safeHost(url: string): string {
   }
 }
 
-/** 账号切换（ipc/app.ts 调用点不变）：换挂该账号 Tab */
+/** 账号切换：workbench 只切业务上下文；live 下激活/必要时创建该账号 account Tab。 */
 export function setActiveAccount(accountId: string) {
   if (!tabManager) return
   const id = tabManager.tabIdForAccount(accountId)
-  if (id != null) tabManager.activateTab(id)
+  if (id != null) {
+    tabManager.activateTab(id)
+    return
+  }
+  if (workspaceMode.mode() === 'live') {
+    const created = tabManager.createTab({ accountId })
+    tabManager.activateTab(created)
+  }
 }
 
 /** shellWindowManager.open() 委托入口：账号 Tab（复用锚）+ nonce 寻址页 */
@@ -697,9 +781,20 @@ export function ensureAccountTab(
   const tabId = tabs.createTab({ accountId, popupOrigins: opts?.popupOrigins })
   const wc = tabWebContents(tabs.webContentsIdOf(tabId))
   if (!wc) throw new Error('账号 Tab webContents 不可达')
+  const previousUrl = wc.getURL()
   wc.loadURL(`about:blank#${nonce}`).catch(err => logger.error('nonce 页加载失败：', err))
   logger.success('壳 pageView Tab 已就绪（账号：', accountId, '）')
-  return { nonce, windowId: wc.id, disposeWindow: async () => tabs.closeTab(tabId) }
+  // v3-7：会话销毁/寻址失败不得关闭 live surface；只把临时 nonce 页恢复回上一页。
+  return {
+    nonce,
+    windowId: wc.id,
+    disposeWindow: async () => {
+      if (wc.isDestroyed()) return
+      if (!wc.getURL().includes(`about:blank#${nonce}`)) return
+      const target = /^(https?|file):/.test(previousUrl) ? previousUrl : 'about:blank'
+      await wc.loadURL(target).catch(err => logger.warn('nonce 页恢复失败：', err))
+    },
+  }
 }
 
 // ==================== E2E 调试契约（LM_SHELL_DEBUG=1，poc/shell/e2e-shell-parity.mjs 消费） ====================
@@ -713,9 +808,10 @@ function registerShellDebug() {
     const bounds = computeShellBounds({
       winW: w,
       winH: h,
-      panelOpen: panel.isOpen(),
+      mode: workspaceMode.mode(),
+      dockOpen: panel.isOpen(),
+      dockWidth: panelWidth,
       activeTabPresent: tabManager.hasActiveTab(),
-      panelWidth,
     })
     const entry = getEntryDebug()
     const noticeBus = getNoticeBusState()
@@ -731,7 +827,12 @@ function registerShellDebug() {
       entryVisible: entry.visible,
       entryUrl: entry.url,
       entryBounds: entry.bounds,
-      expectedEntryBounds: computeEntryBounds({ winW: w, winH: h }),
+      expectedEntryBounds: computeEntryBounds({ winW: w, winH: h, mode: workspaceMode.mode() }),
+      workspaceMode: workspaceMode.mode(),
+      chromeHeight: bounds.chrome.height,
+      workspaceBounds: bounds.workspace,
+      dockWidth: panelWidth,
+      connectedAccountIds: [...accountManager.accountSessions.keys()],
       panelWidth,
       panelDragVisible: isPanelDragWindowVisible(),
       assistantOpen: isAssistantWindowVisible(),
@@ -755,6 +856,7 @@ function registerShellDebug() {
           wcId: tm.webContentsIdOf(t.id),
           url: t.url,
           active: t.active,
+          kind: t.kind,
         }))
       })(),
       childrenUrls: container.contentView.children.map(c => {
@@ -765,6 +867,9 @@ function registerShellDebug() {
   }
   const a = app as unknown as Record<string, unknown>
   a.__shellDebug = read
+  a.__shellWorkspaceModeSet = (mode: WorkspaceState['mode']) => shellWorkspaceModeSet(mode)
+  a.__shellWorkspaceOpenPanel = (routeId?: string | null) => shellWorkspaceOpenPanel(routeId)
+  a.__shellWorkspaceSnapshot = () => shellWorkspaceSnapshot()
   a.__shellToggle = (routeId?: string | null) => panel.toggle(routeId ?? null)
   // Tab 调试契约（仅 LM_SHELL_DEBUG=1）：窗口级 E2E 用，生产不暴露。
   a.__shellTabCreate = (opts?: { url?: string; accountId?: string }) =>
@@ -775,7 +880,12 @@ function registerShellDebug() {
   a.__shellTabCloseBatch = (ids: number[]) => tabManager?.closeBatch(ids)
   a.__shellTabReopen = () => tabManager?.reopenLast() ?? null
   a.__shellSendInputEvent = (keyCode: string, modifiers: string[]) => {
-    const wc = electronWebContents.getFocusedWebContents()
+    // headless/E2E 下窗口可能从未获得 OS 焦点：回退 chrome 视图，仍走真实 before-input-event。
+    const wc =
+      electronWebContents.getFocusedWebContents() ??
+      chromeView?.webContents ??
+      railView?.webContents ??
+      workspaceView?.webContents
     if (!wc) return null
     wc.sendInputEvent({
       type: 'keyDown',

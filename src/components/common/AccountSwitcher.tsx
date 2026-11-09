@@ -22,11 +22,12 @@ export const AccountSwitcher = React.memo(() => {
   const { toast } = useToast()
 
   const handleAccountSwitch = useMemoizedFn(async (accountId: string) => {
-    switchAccount(accountId)
-    toast.success('切换账号成功')
+    const ok = await switchAccount(accountId)
+    if (ok) toast.success('切换账号成功')
+    else toast.error('切换账号失败')
   })
 
-  const handleAddAccount = useMemoizedFn(() => {
+  const handleAddAccount = useMemoizedFn(async () => {
     if (!newAccountName.trim()) {
       toast.error('请输入账号名称')
       return
@@ -37,13 +38,17 @@ export const AccountSwitcher = React.memo(() => {
       return
     }
 
-    addAccount(newAccountName)
+    const ok = await addAccount(newAccountName)
+    if (!ok) {
+      toast.error('添加账号失败')
+      return
+    }
     setIsAddDialogOpen(false)
     setNewAccountName('')
     toast.success('添加账号成功')
   })
 
-  const handleEditAccount = useMemoizedFn(() => {
+  const handleEditAccount = useMemoizedFn(async () => {
     if (!editingAccount) return
     if (!editingAccount.name.trim()) {
       toast.error('请输入账号名称')
@@ -59,7 +64,11 @@ export const AccountSwitcher = React.memo(() => {
       return
     }
 
-    updateAccountName(editingAccount.id, editingAccount.name)
+    const ok = await updateAccountName(editingAccount.id, editingAccount.name)
+    if (!ok) {
+      toast.error('修改账号名称失败')
+      return
+    }
     setIsEditDialogOpen(false)
     setEditingAccount(null)
     toast.success('修改账号名称成功')

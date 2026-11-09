@@ -63,8 +63,8 @@ export function attachEntryView(
   fallbackTimer = setTimeout(() => {
     if (railReadyHandled) return
     railReadyHandled = true
-    logger.warn(`railReady 握手超时（${RAIL_READY_TIMEOUT_MS}ms）：兜底显示入口选择器`)
-    showEntry()
+    // 第二期：启动默认工作台；入口不再兜底抢首屏（workspaceStartup 负责编排）
+    logger.warn(`railReady 握手超时（${RAIL_READY_TIMEOUT_MS}ms）：保持工作台，不显示旧入口`)
   }, RAIL_READY_TIMEOUT_MS)
   fallbackTimer.unref?.()
   logger.info('入口视图已挂载（初始隐藏，等待 rail 就绪）')
@@ -133,6 +133,12 @@ export function handleRailReady() {
   }
   showEntry()
   logger.info('显示入口平台选择器')
+}
+
+/** 第二期启动编排接管后，清掉入口的超时兜底，避免 5s 后旧入口覆盖工作台。 */
+export function markRailReadyHandled() {
+  railReadyHandled = true
+  clearFallbackTimer()
 }
 
 /**

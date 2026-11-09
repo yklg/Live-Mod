@@ -1,7 +1,9 @@
 import type { LogMessage } from 'electron-log'
 import type { ProgressInfo, UpdateDownloadedEvent } from 'electron-updater'
+import type { AccountAction, AccountSnapshot, WorkspaceState } from './accounts'
 import type { AIProviderSetPayload, AIProviderState } from './aiProvider'
 import { IPC_CHANNELS } from './ipcChannels'
+import type { LiveHistorySnapshot } from './liveHistory'
 
 export interface IpcChannels {
   // LiveControl
@@ -180,7 +182,15 @@ export interface IpcChannels {
   [IPC_CHANNELS.app.getProviders]: () => Record<string, ProviderInfo>
   [IPC_CHANNELS.app.providersUpdated]: (providers: Record<string, ProviderInfo>) => void
 
-  [IPC_CHANNELS.account.switch]: (params: { account: Account }) => void
+  [IPC_CHANNELS.account.switch]: (params: { account: Account }) => AccountAction
+  [IPC_CHANNELS.account.get]: () => AccountSnapshot
+  [IPC_CHANNELS.account.add]: (name: string) => AccountAction
+  [IPC_CHANNELS.account.remove]: (accountId: string) => AccountAction
+  [IPC_CHANNELS.account.rename]: (accountId: string, name: string) => AccountAction
+  [IPC_CHANNELS.account.migrate]: (legacy: unknown) => AccountSnapshot
+  [IPC_CHANNELS.account.updated]: (snapshot: AccountSnapshot) => void
+  [IPC_CHANNELS.workspace.history]: () => LiveHistorySnapshot
+  [IPC_CHANNELS.workspace.historyUpdated]: (snapshot: LiveHistorySnapshot) => void
 
   // Log
   [IPC_CHANNELS.log]: (message: LogMessage) => void
@@ -233,6 +243,10 @@ export interface IpcChannels {
   [IPC_CHANNELS.shell.entrySkip]: () => void
   [IPC_CHANNELS.shell.entryReopen]: () => void
   [IPC_CHANNELS.shell.railReady]: () => void
+  [IPC_CHANNELS.shell.workspaceState]: (state: WorkspaceState) => void
+  [IPC_CHANNELS.shell.workspaceModeSet]: (mode: WorkspaceState['mode']) => void
+  [IPC_CHANNELS.shell.workspaceOpenPanel]: (routeId?: string | null) => void
+  [IPC_CHANNELS.shell.workspaceSnapshot]: () => WorkspaceState
   // 壳级通知层（shell-ui-polish v3）：renderer 请求 → 主进程校验/缓冲 → 覆盖层渲染
   [IPC_CHANNELS.shell.notify]: (payload: NoticePayload) => { ok: boolean }
   [IPC_CHANNELS.shell.notice]: (payload: NoticePayload) => void
@@ -247,6 +261,7 @@ export interface ShellTabInfo {
   canBack: boolean
   canForward: boolean
   active: boolean
+  kind: 'account' | 'free' | 'popup'
 }
 
 export interface ShellTabsState {

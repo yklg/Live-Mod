@@ -30,7 +30,7 @@ function CardHeader({
     <div
       ref={ref}
       data-slot="card-header"
-      className={cn('flex flex-col space-y-1.5 p-6 @xl/panel:p-4', className)}
+      className={cn('flex flex-col space-y-1.5 p-6 @max-[900px]/panel:p-4', className)}
       {...props}
     />
   )
@@ -47,7 +47,10 @@ function CardTitle({
   return (
     <div
       ref={ref}
-      className={cn('font-semibold leading-none tracking-tight @xl/panel:text-sm', className)}
+      className={cn(
+        'font-semibold leading-none tracking-tight @max-[900px]/panel:text-sm',
+        className,
+      )}
       {...props}
     />
   )
@@ -64,7 +67,7 @@ function CardDescription({
   return (
     <div
       ref={ref}
-      className={cn('text-sm text-muted-foreground @xl/panel:text-xs', className)}
+      className={cn('text-sm text-muted-foreground @max-[900px]/panel:text-xs', className)}
       {...props}
     />
   )
@@ -82,7 +85,7 @@ function CardContent({
     <div
       ref={ref}
       data-slot="card-content"
-      className={cn('p-6 pt-0 @xl/panel:p-4 @xl/panel:pt-0', className)}
+      className={cn('p-6 pt-0 @max-[900px]/panel:p-4 @max-[900px]/panel:pt-0', className)}
       {...props}
     />
   )
@@ -99,7 +102,10 @@ function CardFooter({
   return (
     <div
       ref={ref}
-      className={cn('flex items-center p-6 pt-0 @xl/panel:p-4 @xl/panel:pt-0', className)}
+      className={cn(
+        'flex items-center p-6 pt-0 @max-[900px]/panel:p-4 @max-[900px]/panel:pt-0',
+        className,
+      )}
       {...props}
     />
   )

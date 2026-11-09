@@ -9,6 +9,7 @@ const SHELL_VIEW_NAMES: readonly ShellViewName[] = [
   'index',
   'chrome',
   'rail',
+  'workspace',
   'entry',
   'notice',
   'drag',

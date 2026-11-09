@@ -14,6 +14,7 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 export type ShellViewKind =
   | 'rail'
   | 'chrome'
+  | 'workspace'
   | 'entry'
   | 'notice'
   | 'drag'
@@ -29,7 +30,7 @@ export type TrustLevel = 'business-ui' | 'ai-ui' | 'shell-ui'
 
 const BUSINESS_UI_KINDS: readonly ShellViewKind[] = ['rail']
 const AI_UI_KINDS: readonly ShellViewKind[] = ['rail', 'assistant']
-const SHELL_UI_KINDS: readonly ShellViewKind[] = ['chrome', 'rail', 'assistant']
+const SHELL_UI_KINDS: readonly ShellViewKind[] = ['chrome', 'rail', 'workspace', 'assistant']
 
 export const CHANNEL_TRUST: Partial<Record<keyof IpcChannels, TrustLevel>> = {
   [IPC_CHANNELS.tasks.commentBackend.getState]: 'business-ui',
@@ -47,12 +48,31 @@ export const CHANNEL_TRUST: Partial<Record<keyof IpcChannels, TrustLevel>> = {
   [IPC_CHANNELS.shell.assistantToggle]: 'shell-ui',
   [IPC_CHANNELS.shell.assistantClose]: 'shell-ui',
   [IPC_CHANNELS.shell.assistantReady]: 'shell-ui',
+  // 第二期：账号单一源与 workspace 数据只允许本地壳视图。
+  [IPC_CHANNELS.account.get]: 'shell-ui',
+  [IPC_CHANNELS.account.add]: 'shell-ui',
+  [IPC_CHANNELS.account.remove]: 'shell-ui',
+  [IPC_CHANNELS.account.rename]: 'shell-ui',
+  [IPC_CHANNELS.account.migrate]: 'shell-ui',
+  [IPC_CHANNELS.account.switch]: 'shell-ui',
+  [IPC_CHANNELS.workspace.history]: 'shell-ui',
+  [IPC_CHANNELS.shell.workspaceModeSet]: 'shell-ui',
+  [IPC_CHANNELS.shell.workspaceOpenPanel]: 'shell-ui',
+  [IPC_CHANNELS.shell.workspaceSnapshot]: 'shell-ui',
 }
 
 /** URL → 视图身份。dev（http://host/rail.html）与 prod（file:///.../dist/rail.html）都命中。 */
 export function classifyViewUrl(url: string): ShellViewKind {
   if (!url) return 'unknown'
-  for (const kind of ['rail', 'chrome', 'entry', 'notice', 'drag', 'assistant'] as const) {
+  for (const kind of [
+    'rail',
+    'chrome',
+    'workspace',
+    'entry',
+    'notice',
+    'drag',
+    'assistant',
+  ] as const) {
     if (url.includes(`/${kind}.html`)) return kind
   }
   return 'unknown'

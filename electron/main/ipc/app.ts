@@ -1,6 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { accountManager } from '#/managers/AccountManager'
 import { providerService } from '#/services/ProviderService'
 import { typedIpcMainHandle } from '#/utils'
 
@@ -26,12 +25,6 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(IPC_CHANNELS.app.getProviders, () => {
     return providerService.providers
-  })
-
-  typedIpcMainHandle(IPC_CHANNELS.account.switch, (_, { account }) => {
-    accountManager.setAccountName(account.id, account.name)
-    // 单窗口壳形态（Phase 2.3）：换挂 active pageView
-    void import('#/windows/shellUI').then(m => m.setActiveAccount(account.id))
   })
 }
 

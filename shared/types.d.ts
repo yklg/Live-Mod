@@ -218,7 +218,15 @@ declare type ShellEntryCatalog = {
 }
 
 /** 壳入口视图名（viewHost 以 --lm-view=<name> 注入 renderer argv，preload 同步暴露） */
-declare type ShellViewName = 'index' | 'chrome' | 'rail' | 'entry' | 'notice' | 'drag' | 'assistant'
+declare type ShellViewName =
+  | 'index'
+  | 'chrome'
+  | 'rail'
+  | 'workspace'
+  | 'entry'
+  | 'notice'
+  | 'drag'
+  | 'assistant'
 
 /** 通知语义变体（壳级通知层；经典模式不消费） */
 declare type NoticeVariant = 'success' | 'error' | 'warning' | 'info'

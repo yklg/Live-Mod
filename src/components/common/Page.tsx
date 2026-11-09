@@ -12,7 +12,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions, back }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4 @xl/panel:flex-col @xl/panel:items-stretch @xl/panel:gap-2">
+    <div className="flex items-start justify-between gap-4 @max-[900px]/panel:flex-col @max-[900px]/panel:items-stretch @max-[900px]/panel:gap-2">
       <div className="flex min-w-0 items-start gap-2.5">
         {back && (
           <button
@@ -27,12 +27,12 @@ export function PageHeader({ title, description, actions, back }: PageHeaderProp
         <div className="min-w-0">
           <h1
             data-testid="page-title"
-            className="text-xl font-semibold tracking-tight @xl/panel:text-base"
+            className="text-xl font-semibold tracking-tight @max-[900px]/panel:text-base"
           >
             {title}
           </h1>
           {description && (
-            <p className="mt-1 text-[13px] text-muted-foreground @xl/panel:text-xs">
+            <p className="mt-1 text-[13px] text-muted-foreground @max-[900px]/panel:text-xs">
               {description}
             </p>
           )}
@@ -41,7 +41,7 @@ export function PageHeader({ title, description, actions, back }: PageHeaderProp
       {actions && (
         <div
           data-testid="page-actions"
-          className="flex shrink-0 items-center gap-2 @xl/panel:w-full @xl/panel:flex-wrap @xl/panel:justify-start"
+          className="flex shrink-0 items-center gap-2 @max-[900px]/panel:w-full @max-[900px]/panel:flex-wrap @max-[900px]/panel:justify-start"
         >
           {actions}
         </div>
@@ -75,7 +75,7 @@ export function Page({
 }: PageProps) {
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      <div className="shrink-0 px-6 pb-4 pt-5 @xl/panel:px-4 @xl/panel:pb-3 @xl/panel:pt-4">
+      <div className="shrink-0 px-6 pb-4 pt-5 @max-[900px]/panel:px-4 @max-[900px]/panel:pb-3 @max-[900px]/panel:pt-4">
         <PageHeader title={title} description={description} actions={actions} back={back} />
       </div>
       {full ? (
@@ -87,7 +87,7 @@ export function Page({
         >
           <div
             className={cn(
-              'mx-auto w-full px-6 pb-8 @xl/panel:px-4 @xl/panel:pb-6',
+              'mx-auto w-full px-6 pb-8 @max-[900px]/panel:px-4 @max-[900px]/panel:pb-6',
               narrow ? 'max-w-2xl' : 'max-w-5xl',
             )}
           >

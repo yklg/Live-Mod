@@ -1,6 +1,6 @@
 // 壳面板密度/容器查询 E2E（计划 v3 · TC-PD-12/13/14/15/16/17/18/19/20/21/23/24）
 // 前置：npx vite build
-// 运行：node poc/shell/e2e-panel-density.mjs（W1 可用 EXPECT_PANEL_W=800 预检；W2 起默认 600）
+// 运行：node poc/shell/e2e-panel-density.mjs（可用 EXPECT_PANEL_W=420 预检；默认 dock 360）
 // 断言：面板内密度(16px)、折叠 aria-expanded、逐路由无横向溢出、两列列宽、弹窗居中、
 //       面板宽度/页面可见宽度、minWidth 钳制、明暗截图。（经典模式已移除，v1.9.0 起不再有经典零变化断言）
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -11,7 +11,7 @@ import { chromium, _electron as electron } from 'playwright'
 const repo = path.resolve(import.meta.dirname, '../..')
 const outDir = path.join(repo, '.screenshots/shell-panel')
 const stamp = Date.now()
-const expectPanelW = Number(process.env.EXPECT_PANEL_W ?? 600)
+const expectDockW = Number(process.env.EXPECT_PANEL_W ?? 360)
 const results = []
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -235,8 +235,8 @@ async function main() {
             }
           })
           record(
-            'M5 设置页两栏（目录+内容）',
-            Boolean(layout) && layout.columns === 2,
+            'M5 设置页窄 dock 单列回退',
+            Boolean(layout) && layout.columns === 1,
             JSON.stringify(layout),
           )
         }
@@ -248,11 +248,11 @@ async function main() {
     // ---- M4 面板宽度 / 页面可见宽度（1280 / 1024 两档）----
     try {
       const d = await ctx.debug()
-      const visible = d.windowWidth - d.railWidth
+      const visible = d.pageBounds?.width ?? 0
       record(
-        'M4a 面板宽度与可见宽度（1280 窗）',
-        d.railWidth === expectPanelW && visible > 0,
-        `window=${d.windowWidth} rail=${d.railWidth} visible=${visible}`,
+        'M4a dock 宽度与 page（1280 窗）',
+        d.railWidth === expectDockW + 56 && visible > 0,
+        `window=${d.windowWidth} rail=${d.railWidth} page=${visible}`,
       )
       await ctx.app.evaluate(({ BrowserWindow }) => {
         const w =
@@ -263,9 +263,9 @@ async function main() {
       await sleep(500)
       const d1024 = await ctx.debug()
       record(
-        'M4b 最小窗（1024）面板 600/可见宽度',
-        d1024.windowWidth === 1024 && d1024.railWidth === expectPanelW,
-        `window=${d1024.windowWidth} rail=${d1024.railWidth} visible=${d1024.windowWidth - d1024.railWidth}`,
+        'M4b 最小窗（1024）dock overlay / page 912',
+        d1024.windowWidth === 1024 && d1024.railWidth === expectDockW + 56,
+        `window=${d1024.windowWidth} rail=${d1024.railWidth} page=${d1024.pageBounds?.width}`,
       )
       // ---- M9 minWidth 钳制 ----
       await ctx.app.evaluate(({ BrowserWindow }) => {

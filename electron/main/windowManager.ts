@@ -8,7 +8,7 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
  * 注：本模块**不 import electron 运行时**（仅 `import type`），因此可直接在 vitest(node) 中实例化。
  * 保持这一点是 windowManager 可测的前提 —— 不要在类内 `import { app } from 'electron'`。
  */
-export type PushTarget = 'ui' | 'chrome' | 'notice' | 'assistant'
+export type PushTarget = 'ui' | 'chrome' | 'notice' | 'assistant' | 'workspace'
 
 /** 每个目标最多缓存的待发事件数 */
 const QUEUE_CAPACITY = 32

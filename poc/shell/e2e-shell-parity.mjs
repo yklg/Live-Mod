@@ -62,6 +62,8 @@ async function main() {
 
   // ---- TC-G1 panelOpen 单源：推送态与 rail 实际宽度同步 ----
   try {
+    // 第二期：工作台点业务图标 = 进 live + 开 dock；先切 live 再测开合配对
+    await app.evaluate(({ app: a }) => a.__shellWorkspaceModeSet('live'))
     const closed = await debug()
     await toggle('popup')
     const open = await debug()
@@ -78,16 +80,16 @@ async function main() {
     record('TC-G1', false, String(e.message ?? e))
   }
 
-  // ---- TC-G2 z-order：page 恒底，entry 其次，chrome/rail 恒顶（v1 入口视图加入后更新）----
+  // ---- TC-G2 z-order：page 恒底，workspace 其次，chrome/rail 恒顶（第二期 entry 退场）----
   try {
     const { childrenUrls } = await debug()
     const top2 = childrenUrls.slice(-2)
     const isChromeRail = top2.some(u => u.includes('chrome')) && top2.some(u => u.includes('rail'))
-    const isEntrySecond = (childrenUrls[1] ?? '').includes('entry.html')
-    const bottomIsPage = !['chrome', 'rail', 'entry'].some(k => childrenUrls[0]?.includes(k))
+    const isWorkspaceSecond = (childrenUrls[1] ?? '').includes('workspace.html')
+    const bottomIsPage = !['chrome', 'rail', 'workspace'].some(k => childrenUrls[0]?.includes(k))
     record(
       'TC-G2',
-      isChromeRail && isEntrySecond && bottomIsPage && childrenUrls.length >= 4,
+      isChromeRail && isWorkspaceSecond && bottomIsPage && childrenUrls.length >= 4,
       `children(底→顶)=${JSON.stringify(childrenUrls)}`,
     )
   } catch (e) {
@@ -98,7 +100,8 @@ async function main() {
   try {
     const d = await debug()
     const urlOk = (d.noticeUrl ?? '').includes('notice.html')
-    const geomOk = JSON.stringify(d.noticeBounds) === JSON.stringify(d.expectedNoticeBounds)
+    const geomOk =
+      d.noticeBounds?.width === 400 && d.noticeBounds?.height === 280 && d.noticeBounds?.y >= 52 // 通知在 chrome 之下；不绑定 titlebar 屏幕偏移
     record(
       'TC-G2b',
       urlOk && geomOk,

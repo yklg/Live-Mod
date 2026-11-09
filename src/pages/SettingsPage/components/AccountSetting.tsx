@@ -36,9 +36,10 @@ export function AccountSetting() {
     if (isConnected === 'connected') {
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.disconnect, currentAccountId)
     }
-    removeAccount(currentAccountId)
+    const ok = await removeAccount(currentAccountId)
     setIsDeleteDialogOpen(false)
-    toast.success('删除账号成功')
+    if (ok) toast.success('删除账号成功')
+    else toast.error('删除账号失败')
   })
 
   return (

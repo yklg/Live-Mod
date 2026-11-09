@@ -39,6 +39,9 @@ const pageBy = needle =>
 try {
   const chrome = await pageBy('chrome.html')
   await chrome.waitForLoadState().catch(() => {})
+  // 第二期：标签行只在自由浏览出现
+  await app.evaluate(({ app: a }) => a.__shellWorkspaceModeSet('browse'))
+  await waitFor(async () => (await debug()).workspaceMode === 'browse', 5000, 'browse 模式')
   const initial = await debug()
   record('T1 初始 1 个 Tab', initial.tabs.length === 1, JSON.stringify(initial.tabs))
 

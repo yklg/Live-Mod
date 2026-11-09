@@ -199,25 +199,36 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     expect(railHtml, '容器根需 height:100% 保障 fixed/Portal 包含块=视口').toContain('height: 100%')
   })
 
-  it('TC-CQ2 [只加不删] 共享组件保留既有视口类，同时新增 @xl/panel 容器变体', () => {
+  it('TC-CQ2 [只加不删] 共享组件保留既有视口类，同时新增窄面板容器变体', () => {
     const ledger: Array<[string, string[]]> = [
-      ['src/components/ui/card.tsx', ['p-6', '@xl/panel:p-4', 'text-sm', '@xl/panel:text-xs']],
+      [
+        'src/components/ui/card.tsx',
+        ['p-6', '@max-[900px]/panel:p-4', 'text-sm', '@max-[900px]/panel:text-xs'],
+      ],
       [
         'src/components/common/Page.tsx',
-        ['px-6 pb-4 pt-5', '@xl/panel:px-4', 'text-xl', '@xl/panel:text-base'],
+        ['px-6 pb-4 pt-5', '@max-[900px]/panel:px-4', 'text-xl', '@max-[900px]/panel:text-base'],
       ],
-      ['src/components/ui/input.tsx', ['md:text-sm', '@xl/panel:text-sm']],
-      ['src/components/ui/textarea.tsx', ['md:text-sm', '@xl/panel:text-sm']],
+      ['src/components/ui/input.tsx', ['md:text-sm', '@max-[900px]/panel:text-sm']],
+      ['src/components/ui/textarea.tsx', ['md:text-sm', '@max-[900px]/panel:text-sm']],
       [
         'src/components/ui/dialog.tsx',
-        ['sm:max-w-lg', '@xl/panel:max-w-lg', 'sm:flex-row', '@xl/panel:flex-row'],
+        [
+          'sm:max-w-lg',
+          '@max-[900px]/panel:max-w-lg',
+          'sm:flex-row',
+          '@max-[900px]/panel:flex-row',
+        ],
       ],
-      ['src/components/ui/alert-dialog.tsx', ['sm:text-left', '@xl/panel:text-left']],
+      ['src/components/ui/alert-dialog.tsx', ['sm:text-left', '@max-[900px]/panel:text-left']],
       [
         'src/components/common/SettingsLayout.tsx',
-        ['grid-cols-[172px_1fr]', '@xl/panel:grid-cols-[148px_1fr]'],
+        ['grid-cols-[172px_1fr]', '@max-[900px]/panel:grid-cols-[148px_1fr]'],
       ],
-      ['src/components/ai-chat/APIKeyDialog.tsx', ['sm:max-w-[425px]', '@xl/panel:max-w-[425px]']],
+      [
+        'src/components/ai-chat/APIKeyDialog.tsx',
+        ['sm:max-w-[425px]', '@max-[900px]/panel:max-w-[425px]'],
+      ],
     ]
     for (const [rel, needles] of ledger) {
       const src = readIfExists(rel)
@@ -233,7 +244,7 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
       const src = readIfExists(rel) ?? ''
       expect(src, '经典全宽两列必须保留').toContain('xl:grid-cols-[2fr_1fr]')
       expect(src, '600 面板内两列会溢出（弹窗设置卡/开关压字）→ 禁用面板两列').not.toContain(
-        '@xl/panel:grid-cols',
+        '@max-[900px]/panel:grid-cols',
       )
     }
   })
@@ -259,11 +270,14 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     expect(router).not.toContain('/ai-chat')
   })
 
-  it('TC-CQ6 [最小窗/死分支] app.ts minWidth=1024 且 > DEGRADE_W（面板降级分支常规不可达）', () => {
+  it('TC-CQ6 [最小窗/dock 门槛] app.ts minWidth=1024；shellLayout 暴露 320/360/420 与 PAGE_MIN=640', () => {
     const app = readIfExists('electron/main/app.ts') ?? ''
     expect(app).toContain('minWidth: 1024')
     const layout = readIfExists('electron/main/windows/shellLayout.ts') ?? ''
-    expect(layout).toContain('export const DEGRADE_W = PANEL_W + RAIL_W')
+    expect(layout).toContain('export const DOCK_MIN = 320')
+    expect(layout).toContain('export const DOCK_W = 360')
+    expect(layout).toContain('export const DOCK_MAX = 420')
+    expect(layout).toContain('export const PAGE_MIN = 640')
   })
 
   it('TC-CQ5 [经典隔离] 经典入口不声明面板容器（容器变体结构性不生效）', () => {

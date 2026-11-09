@@ -3,13 +3,7 @@
 import { BrowserWindow, session } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { typedIpcMainHandle } from '#/utils'
-import {
-  getEntryCatalogSnapshot,
-  handleRailReady,
-  hideEntry,
-  reopenEntry,
-  selectEntry,
-} from '#/windows/entryView'
+import { getEntryCatalogSnapshot, hideEntry, selectEntry } from '#/windows/entryView'
 import { handleNoticeReady, pushNotice } from '#/windows/noticeBus'
 import { accountTabPartition } from '#/windows/shellTabManager'
 import {
@@ -34,7 +28,11 @@ import {
   shellTabReload,
   shellTabReopen,
   shellTabsList,
+  shellWorkspaceModeSet,
+  shellWorkspaceOpenPanel,
+  shellWorkspaceSnapshot,
 } from '#/windows/shellUI'
+import { handleWorkspaceReady } from '#/windows/workspaceStartup'
 
 function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.tabCreate, (_, params) => shellTabCreate(params))
@@ -61,21 +59,33 @@ function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.assistantReady, event => shellAssistantReady(event.sender))
   typedIpcMainHandle(IPC_CHANNELS.shell.tabsList, () => shellTabsList())
   typedIpcMainHandle(IPC_CHANNELS.shell.railToggle, (_, routeId) => shellRailToggle(routeId))
+  typedIpcMainHandle(IPC_CHANNELS.shell.workspaceModeSet, (_, mode) => shellWorkspaceModeSet(mode))
+  typedIpcMainHandle(IPC_CHANNELS.shell.workspaceOpenPanel, (_, routeId) =>
+    shellWorkspaceOpenPanel(routeId),
+  )
+  typedIpcMainHandle(IPC_CHANNELS.shell.workspaceSnapshot, () => shellWorkspaceSnapshot())
   typedIpcMainHandle(IPC_CHANNELS.shell.uiStatus, () => isShellUIEnabled())
 
   // ---- 壳入口平台选择器（shell-entry-platform-selector v1）----
   // 入口=纯展示：目录/记忆快照由主进程下发，选择/跳过只回主进程；连接编排在 rail 业务树（entryIntent）
   typedIpcMainHandle(IPC_CHANNELS.shell.entryCatalog, () => getEntryCatalogSnapshot())
-  typedIpcMainHandle(IPC_CHANNELS.shell.entrySelect, (_, params) =>
-    selectEntry(params.platform, params.remember, isShellUIEnabled()),
-  )
-  typedIpcMainHandle(IPC_CHANNELS.shell.entrySkip, () => hideEntry())
+  typedIpcMainHandle(IPC_CHANNELS.shell.entrySelect, (_, params) => {
+    const result = selectEntry(params.platform, params.remember, isShellUIEnabled())
+    if (result.ok) shellWorkspaceModeSet('live')
+    return result
+  })
+  typedIpcMainHandle(IPC_CHANNELS.shell.entrySkip, () => {
+    hideEntry()
+    shellWorkspaceModeSet('workbench')
+  })
   typedIpcMainHandle(IPC_CHANNELS.shell.entryReopen, () => {
-    if (isShellUIEnabled()) reopenEntry()
+    if (!isShellUIEnabled()) return
+    hideEntry()
+    shellWorkspaceModeSet('workbench')
   })
   typedIpcMainHandle(IPC_CHANNELS.shell.railReady, () => {
     if (!isShellUIEnabled()) return
-    handleRailReady()
+    handleWorkspaceReady()
     shellRestoreLayout()
   })
 

@@ -1,35 +1,41 @@
-// 壳布局记忆持久化（userData/shell-layout.json）
-// 模式与 EntryStore/ZoomStore 一致：纯 parse/serialize + fs 可注入 + 异常兜底。
-// 边界：面板宽度只做 [PANEL_MIN, PANEL_MAX] 的静态钳制；窗口相关钳制在 shellLayout.clampPanelWidth。
+// 壳布局记忆持久化（userData/shell-layout.json）· v2
+// v1 → v2：panelWidth→dockWidth（钳 320–420）、panelOpen→dockOpen；routeId 保留。
+// mode 不持久化（启动由 autoRestore 决定）。
 import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import { isKnownShellRouteId, type ShellRouteId } from 'shared/shellRoutes'
-import { PANEL_MAX, PANEL_MIN, PANEL_W } from '#/windows/shellLayout'
+import { clampDockWidth, DOCK_W } from '#/windows/shellLayout'
 
 export const LAYOUT_STORE_FILE = 'shell-layout.json'
-export const LAYOUT_STORE_VERSION = 1
+export const LAYOUT_STORE_VERSION = 2
 
 export interface LayoutState {
   version: number
-  panelWidth: number
-  panelOpen: boolean
+  dockWidth: number
+  dockOpen: boolean
   routeId: ShellRouteId | null
 }
 
 export const DEFAULT_LAYOUT_STATE: LayoutState = {
   version: LAYOUT_STORE_VERSION,
-  panelWidth: PANEL_W,
-  panelOpen: false,
+  dockWidth: DOCK_W,
+  dockOpen: false,
   routeId: null,
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+function parseRouteId(value: unknown): ShellRouteId | null | undefined {
+  if (value === null) return null
+  if (typeof value !== 'string') return undefined
+  return isKnownShellRouteId(value) ? value : null
+}
+
 /**
- * 严格解析：非法 JSON/版本/字段类型 → null；宽度越界做静态钳制；
- * 未知 routeId（含已退场的 ai）降级为 null，但不丢宽度/开合。
+ * 严格解析：v2 优先；v1 做一次性映射。非法 JSON/未知版本/字段类型 → null。
+ * 损坏字段不吞成默认；调用方 loadLayoutState 负责回默认。
  */
 export function parseLayoutState(raw: string | null): LayoutState | null {
   if (!raw) return null
@@ -40,17 +46,37 @@ export function parseLayoutState(raw: string | null): LayoutState | null {
     return null
   }
   if (!isRecord(data)) return null
-  const { version, panelWidth, panelOpen, routeId } = data
-  if (version !== LAYOUT_STORE_VERSION) return null
-  if (typeof panelWidth !== 'number' || !Number.isFinite(panelWidth)) return null
-  if (typeof panelOpen !== 'boolean') return null
-  if (routeId !== null && typeof routeId !== 'string') return null
-  return {
-    version: LAYOUT_STORE_VERSION,
-    panelWidth: Math.round(Math.min(PANEL_MAX, Math.max(PANEL_MIN, panelWidth))),
-    panelOpen,
-    routeId: isKnownShellRouteId(routeId) ? routeId : null,
+  const version = data.version
+  const routeId = parseRouteId(data.routeId)
+  if (routeId === undefined) return null
+
+  if (version === 2) {
+    const { dockWidth, dockOpen } = data
+    if (typeof dockWidth !== 'number' || !Number.isFinite(dockWidth)) return null
+    if (typeof dockOpen !== 'boolean') return null
+    return {
+      version: LAYOUT_STORE_VERSION,
+      dockWidth: clampDockWidth(dockWidth),
+      dockOpen,
+      routeId,
+    }
   }
+
+  // v1 兼容：panelWidth/panelOpen
+  if (version === 1) {
+    const { panelWidth, panelOpen } = data
+    if (typeof panelWidth !== 'number' || !Number.isFinite(panelWidth)) return null
+    if (typeof panelOpen !== 'boolean') return null
+    const mappedWidth = panelWidth > 0 ? panelWidth : DOCK_W
+    return {
+      version: LAYOUT_STORE_VERSION,
+      dockWidth: clampDockWidth(mappedWidth),
+      dockOpen: panelOpen,
+      routeId,
+    }
+  }
+
+  return null
 }
 
 export function serializeLayoutState(state: LayoutState): string {
@@ -82,7 +108,7 @@ export function loadLayoutState(
 /** 写入布局：成功 true，任何异常 false（布局记忆丢失不阻断启动）。 */
 export function saveLayoutState(
   state: LayoutState,
-  opts: { path?: string; writeFile?: (p: string, data: string) => void } = {},
+  opts: { path?: string; writeFile?: (p: string, d: string) => void } = {},
 ): boolean {
   try {
     const filePath = opts.path ?? getLayoutStorePath()

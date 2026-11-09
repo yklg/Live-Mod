@@ -39,6 +39,7 @@ export function useGlobalIpcListener() {
   const handleUpdate = useUpdateStore.use.handleUpdate()
   const { toast } = useToast()
   const { connectLiveControl } = useConnectToLiveControl()
+  const accountsHydrated = useAccounts(s => s.hydrated)
 
   useIpcListener(IPC_CHANNELS.tasks.autoReply.showComment, ({ comment, accountId }) => {
     handleComment(comment, accountId)
@@ -92,11 +93,12 @@ export function useGlobalIpcListener() {
     })()
   })
 
-  // rail 完整业务树就绪握手：主进程据此裁决「恢复记忆 / 显示入口」。
-  // StrictMode 双调幂等（主进程侧幂等）；经典模式主进程 no-op，零副作用。
+  // rail 完整业务树就绪握手：主进程据此裁决「工作台 / 自动进 live」。
+  // 必须等账号 hydration 完成：否则 autoRestore 会用默认账号连接。
   useEffect(() => {
+    if (!accountsHydrated) return
     void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railReady)
-  }, [])
+  }, [accountsHydrated])
 
   useIpcListener(IPC_CHANNELS.app.notifyUpdate, info => {
     if (enableAutoCheckUpdate) {
@@ -107,14 +109,6 @@ export function useGlobalIpcListener() {
 
 function App() {
   const { enabled: devMode } = useDevMode()
-  const { accounts, currentAccountId } = useAccounts()
-
-  useEffect(() => {
-    const account = accounts.find(acc => acc.id === currentAccountId)
-    if (account) {
-      window.ipcRenderer.invoke(IPC_CHANNELS.account.switch, { account })
-    }
-  }, [accounts, currentAccountId])
 
   useGlobalIpcListener()
 

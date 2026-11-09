@@ -1,128 +1,85 @@
 import { describe, expect, it } from 'vitest'
 import { createPanelController } from '#/windows/panelController'
-import { type computeShellBounds, PANEL_MIN, PANEL_W, RAIL_W } from '#/windows/shellLayout'
-
-// ===== 面板开合态唯一真源（guangquan-shell-ui-parity v3 · A2）=====
-// 契约：panelOpen 只存在于主进程本控制器；chrome/rail 一律发请求（toggle/close），
-// 本层翻转状态 → computeShellBounds 重算 → applyBounds + pushRail 回推。
-// 渲染层（railView）不持开合态——TC-P2 的配对等式（推送态==bounds 宽度档）是防漂移主防线。
-// createPanelController(deps)：deps = { winSize():{w,h}, hasActiveTab():boolean, applyBounds(b), pushRail(s) }
-// 方法：toggle(routeId?)（同 route 再点=收起；异 route=换页保持展开）/ close() / resize() /
-//       isOpen() / route()
+import type { ShellBounds, WorkspaceMode } from '#/windows/shellLayout'
 
 function setup(opts?: {
   winW?: number
   winH?: number
   hasActiveTab?: boolean
-  panelWidth?: number
+  dockWidth?: number
+  mode?: WorkspaceMode
 }) {
   const size = { w: opts?.winW ?? 1440, h: opts?.winH ?? 800 }
-  const applied: Array<ReturnType<typeof computeShellBounds>> = []
+  const applied: ShellBounds[] = []
   const pushed: Array<{ panelOpen: boolean; routeId: string | null }> = []
   const ctrl = createPanelController({
     winSize: () => ({ ...size }),
     hasActiveTab: () => opts?.hasActiveTab ?? true,
-    panelWidth: () => opts?.panelWidth ?? PANEL_W,
+    mode: () => opts?.mode ?? 'live',
+    dockWidth: () => opts?.dockWidth ?? 360,
     applyBounds: b => applied.push(b),
     pushRail: s => pushed.push(s),
   })
   return { size, ctrl, applied, pushed }
 }
 
-describe('panelController 开合决策表（TC-P1）', () => {
-  it('TC-P1.1 [chrome 发起] toggle(popup) → 展开，推送与 bounds 同步', () => {
+describe('panelController 开合决策表', () => {
+  it('toggle(popup) → open，推送与 dock bounds 同步', () => {
     const f = setup()
     f.ctrl.toggle('popup')
     expect(f.ctrl.isOpen()).toBe(true)
     expect(f.ctrl.route()).toBe('popup')
     expect(f.pushed.at(-1)).toEqual({ panelOpen: true, routeId: 'popup' })
-    expect(f.applied.at(-1)?.rail.width).toBe(PANEL_W)
+    expect(f.applied.at(-1)?.rail.width).toBe(416)
+    expect(f.applied.at(-1)?.page?.width).toBe(1440 - 56 - 360 - 56)
   })
 
-  it('TC-P1.2 [rail 同图标再点] 展开态 toggle(同 route) → 收起', () => {
+  it('同 route 再 toggle → close；异 route → 保持打开换页', () => {
     const f = setup()
     f.ctrl.toggle('popup')
     f.ctrl.toggle('popup')
     expect(f.ctrl.isOpen()).toBe(false)
     expect(f.pushed.at(-1)).toEqual({ panelOpen: false, routeId: null })
-    expect(f.applied.at(-1)?.rail.width).toBe(RAIL_W)
-  })
-
-  it('TC-P1.3 [换页不收起] 展开态 toggle(异 route) → 保持展开、route 切换', () => {
-    const f = setup()
     f.ctrl.toggle('popup')
     f.ctrl.toggle('message')
     expect(f.ctrl.isOpen()).toBe(true)
     expect(f.ctrl.route()).toBe('message')
-    expect(f.pushed.at(-1)).toEqual({ panelOpen: true, routeId: 'message' })
   })
 
-  it('TC-P1.4 [ESC/×] close() 幂等：双调仍为收起', () => {
+  it('open(route) 可原子打开指定 route，close 幂等', () => {
     const f = setup()
-    f.ctrl.toggle('popup')
+    f.ctrl.open('settings')
+    expect(f.ctrl.isOpen()).toBe(true)
+    expect(f.ctrl.route()).toBe('settings')
     f.ctrl.close()
     f.ctrl.close()
     expect(f.ctrl.isOpen()).toBe(false)
-    expect(f.ctrl.route()).toBeNull()
   })
 
-  it('TC-P1.5 [来源等价] chrome 与 rail 的 toggle 走同一入口，效果与来源无关', () => {
-    const a = setup()
-    const b = setup()
-    a.ctrl.toggle('popup')
-    b.ctrl.toggle('popup')
-    expect(a.pushed).toEqual(b.pushed)
-    expect(a.applied).toEqual(b.applied)
-  })
-})
-
-describe('panelController 配对契约与降级（TC-P2~P3）', () => {
-  it('TC-P2 [配对等式·storage TC-02 同构] 任意操作后：推送 panelOpen == rail bounds 宽度档（写==读）', () => {
-    const f = setup()
-    const ops = [
-      () => f.ctrl.toggle('popup'),
-      () => f.ctrl.toggle('message'),
-      () => f.ctrl.toggle('message'),
-      () => f.ctrl.close(),
-      () => f.ctrl.toggle('settings'),
-    ]
-    for (const op of ops) {
-      op()
-      const lastPush = f.pushed.at(-1)
-      const lastBounds = f.applied.at(-1)
-      expect(lastPush?.panelOpen, `op 后宽度=${lastBounds?.rail.width}`).toBe(
-        lastBounds && lastBounds.rail.width > RAIL_W,
-      )
-    }
+  it('1024 + 360：overlay 下 page bounds 与收起态相同', () => {
+    const closed = setup({ winW: 1024, winH: 720 })
+    const open = setup({ winW: 1024, winH: 720 })
+    closed.ctrl.close()
+    open.ctrl.open('popup')
+    expect(open.applied.at(-1)?.page).toEqual(closed.applied.at(-1)?.page)
+    expect(open.applied.at(-1)?.page?.width).toBe(1024 - 56 - 56)
+    expect(open.pushed.at(-1)?.panelOpen).toBe(true)
   })
 
-  it('TC-P3 [窄窗 overlay 钳制] winW=640（低于默认 600 的舒适区）：面板钳到 PANEL_MIN，不溢出', () => {
-    const f = setup({ winW: 640 })
-    f.ctrl.toggle('popup')
-    expect(f.applied.at(-1)?.rail).toMatchObject({ x: 640 - PANEL_MIN, width: PANEL_MIN })
-    f.ctrl.toggle('popup')
-    expect(f.applied.at(-1)?.rail.width).toBe(RAIL_W)
-    f.ctrl.toggle('popup')
-    // 窄窗重开仍走 overlay 钳制档，不出现 600 溢出
-    expect(f.applied.at(-1)?.rail.width).toBe(PANEL_MIN)
-    expect(f.pushed.at(-1)?.panelOpen).toBe(true)
-  })
-
-  it('TC-P3b [resize 重算] 展开中窗口变窄到 640 → applyBounds 收到钳制档，推送态不变', () => {
-    const f = setup({ winW: 1440 })
-    f.ctrl.toggle('popup')
-    expect(f.applied.at(-1)?.rail.width).toBe(PANEL_W)
-    f.size.w = 640
+  it('resize 只重算不翻态；无 active Tab 时 page=null', () => {
+    const f = setup({ hasActiveTab: false })
+    f.ctrl.open('popup')
+    expect(f.applied.at(-1)?.page).toBeNull()
+    f.size.w = 1024
     f.ctrl.resize()
-    expect(f.applied.at(-1)?.rail.width).toBe(PANEL_MIN)
     expect(f.ctrl.isOpen()).toBe(true)
     expect(f.pushed.at(-1)?.panelOpen).toBe(true)
   })
 
-  it('TC-P3c [无 active Tab] hasActiveTab=false 时 bounds.page=null，面板逻辑不受影响', () => {
-    const f = setup({ hasActiveTab: false })
-    f.ctrl.toggle('popup')
+  it('workbench 下 dockOpen 不生效（page=null）', () => {
+    const f = setup({ mode: 'workbench' })
+    f.ctrl.open('popup')
     expect(f.applied.at(-1)?.page).toBeNull()
-    expect(f.applied.at(-1)?.rail.width).toBe(PANEL_W)
+    expect(f.applied.at(-1)?.rail.width).toBe(56)
   })
 })

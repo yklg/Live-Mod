@@ -37,7 +37,7 @@ export function SettingsLayout({
     <div
       data-testid="settings-layout"
       className={cn(
-        'grid grid-cols-[172px_1fr] items-start gap-6 @xl/panel:grid-cols-[148px_1fr] @xl/panel:gap-4',
+        'grid grid-cols-[172px_1fr] items-start gap-6 @max-[900px]/panel:grid-cols-[148px_1fr] @max-[900px]/panel:gap-4',
         '@max-[560px]/panel:grid-cols-1 @max-[560px]/panel:gap-3',
         className,
       )}

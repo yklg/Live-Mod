@@ -50,11 +50,16 @@ export function useTaskControl<T extends TaskType>(params: UseTaskControlParams<
 
   const { toast } = useToast()
   const accountId = useAccounts(store => store.currentAccountId)
+  const accountsHydrated = useAccounts(store => store.hydrated)
 
   /**
    * 启动任务
    */
   const onStartTask = useCallback(async () => {
+    if (!accountsHydrated) {
+      toast.error('账号配置加载中，请稍后再启动任务')
+      return
+    }
     const config = getConfig()
 
     let result: boolean
@@ -84,6 +89,7 @@ export function useTaskControl<T extends TaskType>(params: UseTaskControlParams<
     setIsRunning,
     toast,
     accountId,
+    accountsHydrated,
     startSuccessMessage,
     startFailureMessage,
     taskType,

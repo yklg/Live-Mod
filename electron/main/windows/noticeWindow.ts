@@ -7,8 +7,8 @@
 import { BrowserWindow } from 'electron'
 import { buildNoticeTestMsArg, buildShellViewArg } from 'shared/shellView'
 import { createLogger } from '#/logger'
+import { getChromeHeight } from './chromeMetrics'
 import { installExternalProtocolGuard } from './externalProtocolGuard'
-import { CHROME_H } from './shellLayout'
 import { loadAppEntry } from './viewHost'
 
 const logger = createLogger('ShellNoticeWindow')
@@ -40,7 +40,7 @@ export function computeNoticeWindowBounds(win: BrowserWindow): {
   const content = win.getContentBounds()
   return {
     x: content.x + content.width - NOTICE_WIN_W - NOTICE_MARGIN,
-    y: content.y + CHROME_H + NOTICE_MARGIN,
+    y: content.y + getChromeHeight() + NOTICE_MARGIN,
     width: NOTICE_WIN_W,
     height: NOTICE_WIN_H,
   }

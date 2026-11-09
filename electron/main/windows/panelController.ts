@@ -1,10 +1,7 @@
-// 面板开合态唯一真源（guangquan-shell-ui-parity v3 · A2）——纯状态 + 注入副作用，零 Electron import。
-// 契约（panelController.test.ts TC-P1~P3c 固化）：
-// - panelOpen/routeId 只存在于本控制器；chromeView 与 railView 一律走 toggle/close 请求入口，来源等价（TC-P1.5）。
-// - 同 route 再 toggle = 收起；异 route = 换页保持展开（TC-P1.2/P1.3）。
-// - 每次状态变化：applyBounds(computeShellBounds(...)) + pushRail({panelOpen, routeId}) 成对发出（TC-P2 写==读等式）。
-// - resize 只重算不翻态（TC-P3b）。
-import { computeShellBounds, type ShellBounds } from './shellLayout'
+// dock 开合态唯一真源（第二期）：纯状态 + 注入副作用，零 Electron import。
+// 与第一期差异：computeShellBounds 需要 mode/dockWidth；page bounds 在 dock 模式让出宽度，
+// 在 overlay 模式保持不变。宽度本身的拖拽写入仍由 shellUI 持有并持久化。
+import { computeShellBounds, type ShellBounds, type WorkspaceMode } from './shellLayout'
 
 export interface RailState {
   panelOpen: boolean
@@ -14,14 +11,15 @@ export interface RailState {
 export interface PanelControllerDeps {
   winSize: () => { w: number; h: number }
   hasActiveTab: () => boolean
-  /** 当前面板宽度；缺省 PANEL_W（旧调用点零变化）。 */
-  panelWidth?: () => number
+  mode?: () => WorkspaceMode
+  dockWidth?: () => number
   applyBounds: (b: ShellBounds) => void
   pushRail: (s: RailState) => void
 }
 
 export interface PanelController {
   toggle(routeId?: string | null): void
+  open(routeId: string | null): void
   close(): void
   resize(): void
   isOpen(): boolean
@@ -38,9 +36,10 @@ export function createPanelController(deps: PanelControllerDeps): PanelControlle
       computeShellBounds({
         winW: w,
         winH: h,
-        panelOpen,
+        mode: deps.mode?.() ?? 'live',
+        dockOpen: panelOpen,
+        dockWidth: deps.dockWidth?.(),
         activeTabPresent: deps.hasActiveTab(),
-        panelWidth: deps.panelWidth?.(),
       }),
     )
     deps.pushRail({ panelOpen, routeId })
@@ -49,7 +48,6 @@ export function createPanelController(deps: PanelControllerDeps): PanelControlle
   return {
     toggle(nextRoute?: string | null) {
       if (panelOpen) {
-        // 无换页意图（null/undefined）或点同图标 → 收起；异 route → 换页保持展开
         if (nextRoute == null || nextRoute === routeId) {
           panelOpen = false
           routeId = null
@@ -60,6 +58,11 @@ export function createPanelController(deps: PanelControllerDeps): PanelControlle
         panelOpen = true
         routeId = nextRoute ?? null
       }
+      apply()
+    },
+    open(nextRoute: string | null) {
+      panelOpen = true
+      routeId = nextRoute
       apply()
     },
     close() {

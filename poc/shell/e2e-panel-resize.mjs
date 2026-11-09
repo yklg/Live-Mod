@@ -1,11 +1,11 @@
-// 面板宽度/拖拽导体 E2E：宽度算术、可见页宽、导体显隐、LayoutStore 重启恢复。
-// 运行：node poc/shell/e2e-panel-resize.mjs（需先构建）
+// dock 宽度/拖拽导体 E2E：宽度算术、让出宽度、导体显隐、LayoutStore 重启恢复。
+// 运行：先 node node_modules/vite/bin/vite.js build，再 node poc/shell/e2e-panel-resize.mjs
 import path from 'node:path'
 import { _electron as electron } from 'playwright'
 
 const results = []
-const record = (id, ok, detail) => {
-  results.push({ id, ok, detail })
+const record = (id, ok, detail = '') => {
+  results.push({ id, ok })
   console.log(`${ok ? 'PASS' : 'FAIL'} ${id} — ${detail}`)
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -33,46 +33,61 @@ const waitFor = async (fn, timeout, label) => {
 let app = await launch()
 try {
   const debug = () => app.evaluate(({ app: a }) => a.__shellDebug())
-  await waitFor(async () => (await debug()).railReady !== false, 15_000, 'shell ready')
-  await app.evaluate(({ app: a }) => a.__shellToggle('live'))
-  await waitFor(async () => (await debug()).panelOpen, 5000, '面板打开')
+  await waitFor(async () => (await debug()).workspaceMode === 'workbench', 15_000, 'shell ready')
+  await app.evaluate(({ app: a }) => a.__shellWorkspaceOpenPanel('popup'))
+  await waitFor(async () => (await debug()).panelOpen, 5000, 'dock 打开')
   const base = await debug()
-  record('R1 默认面板 600', base.panelWidth === 600 && base.railWidth === 600, JSON.stringify(base))
-  const pageW = base.pageBounds?.width
-  record('R2 overlay 语义 page 宽 1224', pageW === 1224, String(pageW))
+  record(
+    'R1 默认 dock 360 / rail 416',
+    base.dockWidth === 360 && base.railWidth === 416,
+    JSON.stringify({ dock: base.dockWidth, rail: base.railWidth }),
+  )
+  record('R2 dock 让出 page 808', base.pageBounds?.width === 808, String(base.pageBounds?.width))
 
-  await app.evaluate(({ app: a }) => a.__shellPanelDragBegin(600, 1000))
+  await app.evaluate(({ app: a }) => a.__shellPanelDragBegin(360, 1000))
   record('R3 导体显示', (await debug()).panelDragVisible === true, '')
-  await app.evaluate(({ app: a }) => a.__shellPanelResize(800))
+  await app.evaluate(({ app: a }) => a.__shellPanelResize(900))
   const wide = await debug()
-  record('R4 向左拖到 800', wide.panelWidth === 800 && wide.railWidth === 800, JSON.stringify(wide))
-  record('R5 拖宽不改 page', wide.pageBounds?.width === pageW, String(wide.pageBounds?.width))
+  record(
+    'R4 向左拖到 420 上限',
+    wide.dockWidth === 420 && wide.railWidth === 476,
+    JSON.stringify({ dock: wide.dockWidth, rail: wide.railWidth }),
+  )
+  record(
+    'R5 dock 变宽 page 让出到 748',
+    wide.pageBounds?.width === 748,
+    String(wide.pageBounds?.width),
+  )
 
   await app.evaluate(({ app: a }) => a.__shellPanelResize(1200))
   const narrow = await debug()
-  record('R6 右拖越过下限钳到 420', narrow.panelWidth === 420, String(narrow.panelWidth))
+  record(
+    'R6 右拖越过下限钳到 320',
+    narrow.dockWidth === 320 && narrow.railWidth === 376,
+    String(narrow.dockWidth),
+  )
   await app.evaluate(({ app: a }) => a.__shellPanelResizeEnd())
   record('R7 导体收起', (await debug()).panelDragVisible === false, '')
 
-  await app.evaluate(({ app: a }) => a.__shellPanelDragBegin(420, 1000))
-  await app.evaluate(({ app: a }) => a.__shellPanelResize(700))
+  await app.evaluate(({ app: a }) => a.__shellPanelDragBegin(320, 1000))
+  await app.evaluate(({ app: a }) => a.__shellPanelResize(800))
   await app.evaluate(({ app: a }) => a.__shellPanelResizeEnd())
   const saved = await debug()
-  record('R8 持久化前 720', saved.panelWidth === 720, String(saved.panelWidth))
+  record('R8 持久化前 420', saved.dockWidth === 420, String(saved.dockWidth))
 } catch (e) {
   record('E2E 异常', false, e.message)
 } finally {
   await app.close().catch(() => {})
 }
 
-// 重启恢复：同一 userData，panelOpen/routeId/宽度都应恢复
+// 重启恢复：同一 userData，dockOpen/routeId/宽度都应恢复
 app = await launch()
 try {
   const debug = () => app.evaluate(({ app: a }) => a.__shellDebug())
   const restored = await waitFor(
     async () => {
       const d = await debug()
-      return d.panelOpen && d.routeId === 'live' ? d : null
+      return d.panelOpen && d.routeId === 'popup' ? d : null
     },
     20_000,
     '重启恢复布局',
@@ -82,10 +97,14 @@ try {
     true,
     JSON.stringify({ open: restored.panelOpen, route: restored.routeId }),
   )
+  record('R10 重启恢复 dock 420', restored.dockWidth === 420, String(restored.dockWidth))
+  await app.evaluate(({ app: a }) => a.__shellWorkspaceModeSet('live'))
+  await sleep(250)
+  const live = await debug()
   record(
-    'R10 重启恢复宽度 720',
-    restored.panelWidth === 720 && restored.railWidth === 720,
-    String(restored.panelWidth),
+    'R11 live 后 rail 476 / page 748',
+    live.railWidth === 476 && live.pageBounds?.width === 748,
+    JSON.stringify({ rail: live.railWidth, page: live.pageBounds }),
   )
 } catch (e) {
   record('重启恢复失败', false, e.message)
@@ -94,5 +113,5 @@ try {
 }
 
 const failed = results.filter(r => !r.ok)
-console.log(`\n== 面板 E2E 汇总：${results.length - failed.length}/${results.length} PASS ==`)
+console.log(`\n== dock E2E 汇总：${results.length - failed.length}/${results.length} PASS ==`)
 process.exit(failed.length ? 1 : 0)

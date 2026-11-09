@@ -11,7 +11,14 @@ import { installExternalProtocolGuard } from './externalProtocolGuard'
 
 const logger = createLogger('ShellViewHost')
 
-export type ShellEntryName = 'chrome' | 'rail' | 'entry' | 'notice' | 'drag' | 'assistant'
+export type ShellEntryName =
+  | 'chrome'
+  | 'rail'
+  | 'workspace'
+  | 'entry'
+  | 'notice'
+  | 'drag'
+  | 'assistant'
 
 /** 通知停留时长的测试覆盖（仅 LM_SHELL_DEBUG=1 且显式 env 时注入，生产无覆盖） */
 function noticeTestArgs(name: ShellEntryName): string[] {

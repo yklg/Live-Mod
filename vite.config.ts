@@ -31,6 +31,7 @@ export default defineConfig(({ command }) => {
           main: path.join(__dirname, 'index.html'),
           chrome: path.join(__dirname, 'chrome.html'),
           rail: path.join(__dirname, 'rail.html'),
+          workspace: path.join(__dirname, 'workspace.html'),
           entry: path.join(__dirname, 'entry.html'),
           notice: path.join(__dirname, 'notice.html'),
           drag: path.join(__dirname, 'drag.html'),

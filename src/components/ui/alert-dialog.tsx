@@ -46,7 +46,7 @@ function AlertDialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDiv
   return (
     <div
       className={cn(
-        'flex flex-col space-y-2 text-center sm:text-left @xl/panel:text-left',
+        'flex flex-col space-y-2 text-center sm:text-left @max-[900px]/panel:text-left',
         className,
       )}
       {...props}
@@ -59,7 +59,7 @@ function AlertDialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDiv
   return (
     <div
       className={cn(
-        'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 @xl/panel:flex-row @xl/panel:justify-end',
+        'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 @max-[900px]/panel:flex-row @max-[900px]/panel:justify-end',
         className,
       )}
       {...props}
@@ -110,7 +110,11 @@ const AlertDialogCancel = ({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) => (
   <AlertDialogPrimitive.Cancel
     data-slot="alert-dialog-cancel"
-    className={cn(buttonVariants({ variant: 'outline' }), 'mt-2 sm:mt-0 @xl/panel:mt-0', className)}
+    className={cn(
+      buttonVariants({ variant: 'outline' }),
+      'mt-2 sm:mt-0 @max-[900px]/panel:mt-0',
+      className,
+    )}
     {...props}
   />
 )
