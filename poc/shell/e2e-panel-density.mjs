@@ -183,10 +183,9 @@ async function main() {
     // ---- M5 逐路由无横向溢出 ----
     const routes = [
       { id: 'popup', title: '自动弹窗', twoCol: true },
-      { id: 'msg', title: '自动发言', twoCol: true },
+      { id: 'message', title: '自动发言', twoCol: true },
       { id: 'reply', title: '自动回复', twoCol: false },
-      { id: 'ai', title: 'AI 助手', twoCol: false },
-      { id: 'set', title: '应用设置', twoCol: false },
+      { id: 'settings', title: '应用设置', twoCol: false },
     ]
     for (const r of routes) {
       try {
@@ -226,7 +225,7 @@ async function main() {
           )
         }
         if (r.id === 'popup') await ctx.captureContainer('panel-density-popup.png')
-        if (r.id === 'set') {
+        if (r.id === 'settings') {
           const layout = await railEval(rail, () => {
             const el = document.querySelector('[data-testid="settings-layout"]')
             if (!el) return null
@@ -244,109 +243,6 @@ async function main() {
       } catch (e) {
         record(`M5 路由「${r.title}」无横向溢出`, false, String(e.message ?? e))
       }
-    }
-
-    // ---- M11 面板页头分层（600 宽标题不被操作区压成竖排）----
-    try {
-      await ctx.invoke('shell:railToggle', 'ai')
-      await waitFor(
-        async () => {
-          const t = await railEval(rail, () =>
-            document.querySelector('[data-testid="page-title"]')?.textContent?.trim(),
-          )
-          return t === 'AI 助手' ? t : null
-        },
-        20_000,
-        'AI 助手页',
-      )
-      await sleep(400)
-      const title = await waitFor(
-        () =>
-          railEval(rail, () => {
-            const t = document.querySelector('[data-testid="page-title"]')
-            const a = document.querySelector('[data-testid="page-actions"]')
-            if (!t) return null
-            const tr = t.getBoundingClientRect()
-            const ar = a ? a.getBoundingClientRect() : null
-            return {
-              title: t.textContent?.trim(),
-              titleW: tr.width,
-              titleH: tr.height,
-              actionsTop: ar?.top ?? null,
-              actionsW: ar?.width ?? null,
-              titleTop: tr.top,
-            }
-          }),
-        5000,
-        'AI 助手页头',
-      )
-      record(
-        'M11 AI 助手页头分层（标题横向/操作区换行不挤压）',
-        Boolean(title) &&
-          (title.titleW ?? 0) >= 100 &&
-          (title.titleH ?? 0) <= 40 &&
-          title.actionsTop !== null &&
-          title.actionsTop >= title.titleTop &&
-          (title.actionsW ?? 0) > 0,
-        JSON.stringify(title),
-      )
-      await ctx.captureContainer('panel-density-ai.png')
-    } catch (e) {
-      record('M11 AI 助手页头分层（标题横向/操作区换行不挤压）', false, String(e.message ?? e))
-    }
-
-    // ---- M6 面板内弹窗居中（Portal/fixed 包含块）----
-    try {
-      const d0 = await ctx.debug()
-      if (!d0.panelOpen || d0.routeId !== 'ai') await ctx.invoke('shell:railToggle', 'ai')
-      await waitFor(
-        async () => {
-          const t = await railEval(rail, () =>
-            document.querySelector('[data-testid="page-title"]')?.textContent?.trim(),
-          )
-          return t === 'AI 助手' ? t : null
-        },
-        20_000,
-        'AI 助手页',
-      )
-      await rail.locator('text=配置 API Key').first().click()
-      const rect = await waitFor(
-        () =>
-          railEval(rail, () => {
-            const d = document.querySelector('[data-slot="dialog-content"]')
-            const o = document.querySelector('[data-slot="dialog-overlay"]')
-            if (!d) return null
-            const r = d.getBoundingClientRect()
-            const or = o ? o.getBoundingClientRect() : null
-            return {
-              cx: r.x + r.width / 2,
-              cy: r.y + r.height / 2,
-              vw: window.innerWidth,
-              vh: window.innerHeight,
-              overlay: or ? { x: or.x, y: or.y, w: or.width, h: or.height } : null,
-              padding: getComputedStyle(d).paddingTop,
-            }
-          }),
-        8000,
-        '弹窗出现',
-      )
-      const dx = Math.abs(rect.cx - rect.vw / 2)
-      const dy = Math.abs(rect.cy - rect.vh / 2)
-      const overlayOk =
-        Boolean(rect.overlay) && rect.overlay.w >= rect.vw - 1 && rect.overlay.h >= rect.vh - 1
-      record(
-        'M6 弹窗居中（Portal/fixed 包含块）',
-        dx <= 2 && dy <= 2 && overlayOk,
-        `dx=${dx.toFixed(1)} dy=${dy.toFixed(1)} overlay=${JSON.stringify(rect.overlay)} padding=${rect.padding}`,
-      )
-      await rail.keyboard.press('Escape')
-      await sleep(300)
-      // ShellRail 的 ESC 同时会收起面板（既有交互）；重新打开以便后续宽度断言
-      const reopened = await ctx.debug()
-      if (!reopened.panelOpen) await ctx.invoke('shell:railToggle', 'live')
-      await sleep(400)
-    } catch (e) {
-      record('M6 弹窗居中（Portal/fixed 包含块）', false, String(e.message ?? e))
     }
 
     // ---- M4 面板宽度 / 页面可见宽度（1280 / 1024 两档）----

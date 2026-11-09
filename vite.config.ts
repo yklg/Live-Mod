@@ -33,6 +33,8 @@ export default defineConfig(({ command }) => {
           rail: path.join(__dirname, 'rail.html'),
           entry: path.join(__dirname, 'entry.html'),
           notice: path.join(__dirname, 'notice.html'),
+          drag: path.join(__dirname, 'drag.html'),
+          assistant: path.join(__dirname, 'assistant.html'),
         },
       },
     },

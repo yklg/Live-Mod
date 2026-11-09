@@ -5,7 +5,15 @@ export const SHELL_VIEW_ARG_PREFIX = '--lm-view='
 /** 通知停留时长测试覆盖（仅测试/调试口径，由主进程按 env 注入 notice 视图 argv） */
 export const NOTICE_TEST_MS_ARG_PREFIX = '--lm-notice-test-ms='
 
-const SHELL_VIEW_NAMES: readonly ShellViewName[] = ['index', 'chrome', 'rail', 'entry', 'notice']
+const SHELL_VIEW_NAMES: readonly ShellViewName[] = [
+  'index',
+  'chrome',
+  'rail',
+  'entry',
+  'notice',
+  'drag',
+  'assistant',
+]
 
 export function isShellViewName(value: string): value is ShellViewName {
   return (SHELL_VIEW_NAMES as readonly string[]).includes(value)

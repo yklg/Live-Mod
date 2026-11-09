@@ -372,8 +372,16 @@ export function useAutoReply() {
           const keywordReplied = handleKeywordReply(comment, config, currentAccountId, handleError)
           // 如果关键字未回复，且 AI 回复已启用，则尝试 AI 回复
           if (!keywordReplied && config.comment.aiReply.enable) {
+            if (!aiStore.hydrated) {
+              handleError(new Error('AI 配置加载中'), 'AI 回复跳过')
+              return
+            }
             const { provider, model } = aiStore.config
             const apiKey = aiStore.apiKeys[provider]
+            if (!apiKey) {
+              handleError(new Error('未配置 API Key'), 'AI 回复跳过')
+              return
+            }
             const customBaseURL = aiStore.customBaseURL
             handleAIReply(
               accountId,

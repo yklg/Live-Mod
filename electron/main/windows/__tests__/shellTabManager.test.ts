@@ -564,3 +564,80 @@ describe('shellTabManager 焦点契约（TC-T17~T20）', () => {
     expect(f.unmounts.filter(x => x === wcId2)).toHaveLength(0)
   })
 })
+
+describe('shellTabManager 排序/批量关闭/重开（TC-T24~T29）', () => {
+  it('TC-T24 moveTab 只重排数组：active/mounted 不变，不触发 layout', () => {
+    const f = setup()
+    const a = f.manager.createTab({ url: 'https://a.example' })
+    const b = f.manager.createTab({ url: 'https://b.example' })
+    const c = f.manager.createTab({ url: 'https://c.example' })
+    f.manager.activateTab(b)
+    const layoutBefore = f.layoutCallsOf()
+    const mountsBefore = f.mounts.length
+    f.manager.moveTab(a, 2)
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([b, c, a])
+    expect(f.manager.state().activeId).toBe(b)
+    expect(f.mounts.length).toBe(mountsBefore)
+    expect(f.layoutCallsOf()).toBe(layoutBefore)
+  })
+
+  it('TC-T25 moveTab 越界钳制；未知 id 空操作；同位置不重复推送', () => {
+    const f = setup()
+    const a = f.manager.createTab({})
+    const b = f.manager.createTab({})
+    const c = f.manager.createTab({})
+    f.manager.moveTab(a, 99)
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([b, c, a])
+    f.manager.moveTab(a, -5)
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([a, b, c])
+    const pushesBefore = f.pushes.length
+    f.manager.moveTab(a, 0)
+    f.manager.moveTab(999, 0)
+    expect(f.pushes.length).toBe(pushesBefore)
+  })
+
+  it('TC-T26 closeBatch 关闭多个：active 迁移、索引清理、不变量保持', () => {
+    const f = setup()
+    const a = f.manager.createTab({})
+    const b = f.manager.createTab({})
+    const c = f.manager.createTab({})
+    f.manager.activateTab(b)
+    f.manager.closeBatch([a, c, a])
+    const s = f.manager.state()
+    expect(s.tabs.map(t => t.id)).toEqual([b])
+    expect(s.activeId).toBe(b)
+    expect(s.tabs.filter(t => t.active)).toHaveLength(1)
+  })
+
+  it('TC-T27 closeBatch 关闭全部 → 重建空白 Tab（≥1 且恰 1 active）', () => {
+    const f = setup()
+    const a = f.manager.createTab({})
+    const b = f.manager.createTab({})
+    f.manager.closeBatch([a, b])
+    const s = f.manager.state()
+    expect(s.tabs.length).toBe(1)
+    expect(s.tabs.filter(t => t.active)).toHaveLength(1)
+  })
+
+  it('TC-T28 reopenLast：重开最近关闭的 free Tab（URL/partition 还原）', async () => {
+    const f = setup()
+    const id = f.manager.createTab({ url: 'https://reopen.example' })
+    f.manager.closeTab(id)
+    const reopened = f.manager.reopenLast()
+    expect(reopened).not.toBeNull()
+    await f.flush()
+    const tab = f.manager.state().tabs.find(t => t.id === reopened)
+    expect(tab?.url).toBe('https://reopen.example')
+    expect(f.newView).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'free', partition: FREE_TAB_PARTITION }),
+    )
+  })
+
+  it('TC-T29 reopenLast：账号 Tab 不入栈，空栈返回 null', () => {
+    const f = setup()
+    expect(f.manager.reopenLast()).toBeNull()
+    const id = f.manager.createTab({ accountId: 'a1' })
+    f.manager.closeTab(id)
+    expect(f.manager.reopenLast()).toBeNull()
+  })
+})

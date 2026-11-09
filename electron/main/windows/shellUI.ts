@@ -23,10 +23,20 @@ import {
   WebContentsView,
 } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { isKnownShellRouteId } from 'shared/shellRoutes'
 import { createLogger } from '#/logger'
+import { LAYOUT_STORE_VERSION, loadLayoutState, saveLayoutState } from '#/services/LayoutStore'
 import { loadZoomFactor, saveZoomFactor } from '#/services/ZoomStore'
 import { classifyViewUrl, setTrustResolver } from '#/utils/ipc'
 import windowManager from '#/windowManager'
+import {
+  attachAssistantWindow,
+  destroyAssistantWindow,
+  getAssistantWindowWebContents,
+  hideAssistantWindow,
+  isAssistantWindowVisible,
+  toggleAssistantWindow,
+} from './assistantWindow'
 import { attachEntryView, destroyEntryView, getEntryDebug, relayoutEntryView } from './entryView'
 import { installExternalProtocolGuard } from './externalProtocolGuard'
 import { foldNavigate } from './foldNavigate'
@@ -41,19 +51,40 @@ import {
 import { clampZoom, nextZoom, ZOOM_DEFAULT, ZOOM_STEP, zoomPercent, zoomStoreKey } from './pageZoom'
 import { createPanelController } from './panelController'
 import {
+  attachPanelDragWindow,
+  destroyPanelDragWindow,
+  hidePanelDragWindow,
+  isPanelDragWindowVisible,
+  showPanelDragWindow,
+} from './panelDragWindow'
+import {
   type PendingPopupNav,
   resolvePopupOpenAction,
   shouldSuppressFallbackNavigation,
 } from './popupAction'
 import { clearPopupMode, getPopupMode, setPopupMode } from './popupIntent'
 import { classifyPopup } from './popupPolicy'
-import { computeEntryBounds, computeShellBounds } from './shellLayout'
+import {
+  clampPanelWidth,
+  computeEntryBounds,
+  computeShellBounds,
+  draggedPanelWidth,
+  PANEL_W,
+} from './shellLayout'
 import { installShellMenu } from './shellMenu'
 import { createShellTabManager, type TabView } from './shellTabManager'
 import { chromeUa } from './ua'
 import { loadAppEntry, makeAppView } from './viewHost'
 
 const logger = createLogger('ShellUI')
+
+// 当前面板宽度（LayoutStore 恢复 / 拖拽导体写入；几何计算只读这个值）。
+let panelWidth = PANEL_W
+// 一次拖拽的起点：导体只回传 screenX，宽度算术在主进程保持单一真源。
+let panelDragStart: { width: number; screenX: number } | null = null
+// assistant 懒创建所需入口参数（首次 Cmd+J/顶栏点击才创建，避免启动期多一个窗口抢焦点/E2E firstWindow）。
+let assistantEntry: { url?: string; file?: string } | null = null
+let assistantPreloadPath: string | null = null
 
 // fold loadURL 超时定档（v3 Q6）：超时回退纯 deny，禁止半导航悬挂
 const FOLD_TIMEOUT_MS = 8000
@@ -189,7 +220,44 @@ function installPanelToggleShortcut(wc: Electron.WebContents) {
     if (input.type !== 'keyDown' || !(input.meta || input.control)) return
     if (input.key !== '\\') return
     event.preventDefault()
-    panel.toggle(null)
+    shellRailToggle(null)
+  })
+}
+
+/** 标签键盘契约：Cmd/Ctrl+T/W/1-9、Cmd/Ctrl+Shift+T 重开；pageView 无 preload，只能主进程兜底。 */
+function installTabShortcuts(wc: Electron.WebContents) {
+  wc.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !(input.meta || input.control) || !tabManager) return
+    const key = input.key.toLowerCase()
+    if (key === 't') {
+      event.preventDefault()
+      if (input.shift) tabManager.reopenLast()
+      else tabManager.createTab({})
+      return
+    }
+    if (key === 'w') {
+      event.preventDefault()
+      const id = tabManager.state().activeId
+      if (id) tabManager.closeTab(id)
+      return
+    }
+    if (/^[1-9]$/.test(input.key)) {
+      event.preventDefault()
+      const tabs = tabManager.state().tabs
+      const index = Number(input.key) === 9 ? tabs.length - 1 : Number(input.key) - 1
+      const target = tabs[index]
+      if (target) tabManager.activateTab(target.id)
+    }
+  })
+}
+
+/** AI 浮窗全局入口：Cmd/Ctrl+J；顶栏按钮走同一 facade。 */
+function installAssistantShortcut(wc: Electron.WebContents) {
+  wc.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !(input.meta || input.control)) return
+    if (input.key.toLowerCase() !== 'j' || input.shift) return
+    event.preventDefault()
+    shellAssistantToggle()
   })
 }
 
@@ -209,12 +277,19 @@ export function attachContainer(
   win.contentView.addChildView(railView)
   // 壳级通知覆盖层：独立透明子窗口（真点击穿透 + 父子窗口最顶层；视图方案无 setIgnoreMouseEvents——探针结论）
   attachNoticeWindow(win, entry, preloadPath)
+  // 面板拖拽导体：透明全窗子窗口，预创建隐藏，仅在拖拽期间显示。
+  attachPanelDragWindow(win, entry, preloadPath)
+  // AI 助手全局浮窗：懒创建（首次 Cmd+J/顶栏点击），避免启动期多窗口抢 firstWindow。
+  assistantEntry = entry
+  assistantPreloadPath = preloadPath
   const noticeWc = getNoticeWindowWebContents()
   if (noticeWc) windowManager.setTarget('notice', noticeWc)
   // 壳内任意视图聚焦时 Cmd/Ctrl +/-/0 都作用于当前活跃 Tab（地址栏/入口同样可用）
   for (const wc of [chromeView.webContents, railView.webContents]) {
     installZoomShortcuts(wc)
     installPanelToggleShortcut(wc)
+    installTabShortcuts(wc)
+    installAssistantShortcut(wc)
   }
 
   // 业务推送目标 = railView（完整业务树，v3 的 panelView 语义迁移）；顶栏走具名 'chrome' 目标
@@ -248,6 +323,8 @@ export function attachContainer(
       installZoomShortcuts(view.webContents)
       // 官方页面聚焦时也要能一键让出右侧（业务面板遮住评论区，见 installPanelToggleShortcut 注释）
       installPanelToggleShortcut(view.webContents)
+      installTabShortcuts(view.webContents)
+      installAssistantShortcut(view.webContents)
       // 导航完成恢复该站点记忆缩放（官方中控台默认 100% 会被窗口裁切）
       view.webContents.on('did-finish-load', () => applyStoredZoom(view.webContents))
       view.webContents.on('did-navigate', () => applyStoredZoom(view.webContents))
@@ -380,6 +457,7 @@ export function attachContainer(
       return { w, h }
     },
     hasActiveTab: () => tabManager?.hasActiveTab() ?? false,
+    panelWidth: () => panelWidth,
     applyBounds: b => {
       if (chromeView) chromeView.setBounds(b.chrome)
       if (railView) railView.setBounds(b.rail)
@@ -413,7 +491,7 @@ export function attachContainer(
     zoomIn: () => applyZoomStep(ZOOM_STEP),
     zoomOut: () => applyZoomStep(-ZOOM_STEP),
     zoomReset: applyZoomReset,
-    togglePanel: () => panel.toggle(null),
+    togglePanel: () => shellRailToggle(null),
   })
 
   if (process.env.LM_SHELL_DEBUG === '1') registerShellDebug()
@@ -421,6 +499,8 @@ export function attachContainer(
   win.once('closed', () => {
     destroyEntryView()
     destroyNoticeWindow()
+    destroyPanelDragWindow()
+    destroyAssistantWindow()
     resetNoticeBus()
     container = null
     chromeView = null
@@ -445,6 +525,18 @@ export function shellTabCreate(params: { url?: string; accountId?: string }): nu
 
 export function shellTabClose(id: number) {
   requireTabs().closeTab(id)
+}
+
+export function shellTabCloseBatch(ids: number[]) {
+  requireTabs().closeBatch(ids)
+}
+
+export function shellTabReopen(): number | null {
+  return requireTabs().reopenLast()
+}
+
+export function shellTabMove(id: number, toIndex: number) {
+  requireTabs().moveTab(id, toIndex)
 }
 
 export function shellTabActivate(id: number) {
@@ -494,6 +586,81 @@ export function shellTabReload(id: number) {
 /** 面板开合唯一入口（A2）：chrome「展开」与 rail 图标/ESC 同走此处 */
 export function shellRailToggle(routeId?: string | null) {
   panel.toggle(routeId ?? null)
+  persistLayout()
+}
+
+function persistLayout() {
+  const route = panel.route()
+  try {
+    saveLayoutState({
+      version: LAYOUT_STORE_VERSION,
+      panelWidth,
+      panelOpen: panel.isOpen(),
+      routeId: isKnownShellRouteId(route) ? route : null,
+    })
+  } catch (error) {
+    logger.warn('布局记忆写入失败（不阻断壳操作）：', error)
+  }
+}
+
+/** railReady 后恢复布局：宽度先应用，再用已知 route 打开面板；未知 route 视为收起。 */
+export function shellRestoreLayout() {
+  const saved = loadLayoutState()
+  if (container && !container.isDestroyed()) {
+    const [w] = container.getContentSize()
+    panelWidth = clampPanelWidth(saved.panelWidth, w)
+  }
+  if (saved.panelOpen && saved.routeId) panel.toggle(saved.routeId)
+  else panel.resize()
+}
+
+/** 拖拽开始（rail 视图 pointerdown → 主进程）：记录起点并显示透明导体。 */
+export function shellPanelDragBegin(startWidth: number, startScreenX: number) {
+  if (!container || container.isDestroyed() || !panel.isOpen()) return
+  const [w] = container.getContentSize()
+  panelDragStart = { width: clampPanelWidth(startWidth, w), screenX: startScreenX }
+  if (!showPanelDragWindow()) logger.warn('面板拖拽导体未就绪，本次拖拽降级为无操作')
+}
+
+/** 导体回传 screenX：宽度算术与钳制都在主进程，渲染层不持几何真源。 */
+export function shellPanelResize(screenX: number) {
+  if (!panelDragStart || !container || container.isDestroyed()) return
+  const [w] = container.getContentSize()
+  const width = clampPanelWidth(
+    draggedPanelWidth(panelDragStart.width, panelDragStart.screenX, screenX),
+    w,
+  )
+  if (width === panelWidth) return
+  panelWidth = width
+  panel.resize()
+}
+
+export function shellPanelResizeEnd() {
+  hidePanelDragWindow()
+  panelDragStart = null
+  persistLayout()
+}
+
+/** AI 浮窗显隐唯一入口：顶栏按钮与 Cmd+J 同走此处；状态推给 chrome。 */
+export function shellAssistantToggle(): boolean {
+  if (!getAssistantWindowWebContents()) {
+    if (!container || !assistantEntry || !assistantPreloadPath) return false
+    attachAssistantWindow(container, assistantEntry, assistantPreloadPath)
+  }
+  const open = toggleAssistantWindow()
+  windowManager.sendTo('chrome', IPC_CHANNELS.shell.assistantState, open)
+  return open
+}
+
+export function shellAssistantClose() {
+  hideAssistantWindow()
+  windowManager.sendTo('chrome', IPC_CHANNELS.shell.assistantState, false)
+}
+
+/** assistant renderer 就绪握手：确认 sender 是 assistant 窗口后设置目标。 */
+export function shellAssistantReady(sender: Electron.WebContents) {
+  const target = getAssistantWindowWebContents()
+  if (target && target.id === sender.id) windowManager.setTarget('assistant', target)
 }
 
 function tabWebContents(wcId: number): Electron.WebContents | undefined {
@@ -548,6 +715,7 @@ function registerShellDebug() {
       winH: h,
       panelOpen: panel.isOpen(),
       activeTabPresent: tabManager.hasActiveTab(),
+      panelWidth,
     })
     const entry = getEntryDebug()
     const noticeBus = getNoticeBusState()
@@ -564,6 +732,9 @@ function registerShellDebug() {
       entryUrl: entry.url,
       entryBounds: entry.bounds,
       expectedEntryBounds: computeEntryBounds({ winW: w, winH: h }),
+      panelWidth,
+      panelDragVisible: isPanelDragWindowVisible(),
+      assistantOpen: isAssistantWindowVisible(),
       noticeUrl: notice.url,
       noticeVisible: notice.visible,
       noticeBounds: notice.bounds,
@@ -595,6 +766,41 @@ function registerShellDebug() {
   const a = app as unknown as Record<string, unknown>
   a.__shellDebug = read
   a.__shellToggle = (routeId?: string | null) => panel.toggle(routeId ?? null)
+  // Tab 调试契约（仅 LM_SHELL_DEBUG=1）：窗口级 E2E 用，生产不暴露。
+  a.__shellTabCreate = (opts?: { url?: string; accountId?: string }) =>
+    tabManager?.createTab(opts ?? {}) ?? null
+  a.__shellTabClose = (id: number) => tabManager?.closeTab(id)
+  a.__shellTabActivate = (id: number) => tabManager?.activateTab(id)
+  a.__shellTabMove = (id: number, toIndex: number) => tabManager?.moveTab(id, toIndex)
+  a.__shellTabCloseBatch = (ids: number[]) => tabManager?.closeBatch(ids)
+  a.__shellTabReopen = () => tabManager?.reopenLast() ?? null
+  a.__shellSendInputEvent = (keyCode: string, modifiers: string[]) => {
+    const wc = electronWebContents.getFocusedWebContents()
+    if (!wc) return null
+    wc.sendInputEvent({
+      type: 'keyDown',
+      keyCode,
+      modifiers: modifiers as Electron.InputEvent['modifiers'],
+    })
+    wc.sendInputEvent({
+      type: 'keyUp',
+      keyCode,
+      modifiers: modifiers as Electron.InputEvent['modifiers'],
+    })
+    return wc.id
+  }
+  a.__shellFocusView = (name: 'chrome' | 'rail') => {
+    const wc = name === 'chrome' ? chromeView?.webContents : railView?.webContents
+    wc?.focus()
+    return wc?.id ?? null
+  }
+  // AI / 面板拖拽调试契约（仅 LM_SHELL_DEBUG=1）。
+  a.__shellAssistantToggle = () => shellAssistantToggle()
+  a.__shellAssistantClose = () => shellAssistantClose()
+  a.__shellPanelDragBegin = (startWidth: number, startScreenX: number) =>
+    shellPanelDragBegin(startWidth, startScreenX)
+  a.__shellPanelResize = (screenX: number) => shellPanelResize(screenX)
+  a.__shellPanelResizeEnd = () => shellPanelResizeEnd()
   // 测试契约（仅 LM_SHELL_DEBUG=1）：模拟会话层声明/复位弹窗意图，供 E2E 覆盖 intent-navigate 折叠路径
   a.__shellPopupMode = (webContentsId: number, mode: 'navigate' | null) =>
     setPopupMode(webContentsId, mode)

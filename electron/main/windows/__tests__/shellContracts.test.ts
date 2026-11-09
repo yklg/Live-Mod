@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { SHELL_ROUTES } from 'shared/shellRoutes'
 import { describe, expect, it } from 'vitest'
 
 // ===== 壳契约扫描断言（guangquan-shell-ui-parity v3 · A1/P3-10）=====
@@ -237,13 +238,10 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     }
   })
 
-  it('TC-CQ4 [路由清单] ShellRail 路由 = 计划 §3 的 9 条（含自动回复设置/直播互动）', () => {
-    const src = readIfExists('src/shell/ShellRail.tsx') ?? ''
-    const routes = [...src.matchAll(/<Route path="([^"]+)"/g)].map(m => m[1]).sort()
-    expect(routes).toEqual(
+  it('TC-CQ4 [路由清单] 单一源 8 条（无 AI）；ShellRail/router 消费同一源', () => {
+    expect(SHELL_ROUTES.map(route => route.path).sort()).toEqual(
       [
         '/',
-        '/ai-chat',
         '/auto-message',
         '/auto-popup',
         '/auto-reply',
@@ -253,6 +251,12 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
         '/settings',
       ].sort(),
     )
+    const rail = readIfExists('src/shell/ShellRail.tsx') ?? ''
+    expect(rail).toContain('SHELL_ROUTES.map')
+    expect(rail).not.toContain('/ai-chat')
+    const router = readIfExists('src/router/index.tsx') ?? ''
+    expect(router).toContain('SHELL_ROUTES.map')
+    expect(router).not.toContain('/ai-chat')
   })
 
   it('TC-CQ6 [最小窗/死分支] app.ts minWidth=1024 且 > DEGRADE_W（面板降级分支常规不可达）', () => {

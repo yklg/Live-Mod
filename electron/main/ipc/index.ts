@@ -1,4 +1,5 @@
 import { setupAIChatIpcHandlers } from './aichat'
+import { setupAIProviderIpcHandlers } from './aiProvider'
 import { setupAppIpcHandlers } from './app'
 import { setupAutoMessageIpcHandlers } from './autoMessage'
 import { setupAutoPopUpIpcHandlers } from './autoPopUp'
@@ -15,6 +16,7 @@ import { setupUpdateIpcHandlers } from './update'
 
 setupLiveControlIpcHandlers()
 setupAIChatIpcHandlers()
+setupAIProviderIpcHandlers()
 setupAutoPopUpIpcHandlers()
 setupAutoReplyIpcHandlers()
 setupAutoMessageIpcHandlers()

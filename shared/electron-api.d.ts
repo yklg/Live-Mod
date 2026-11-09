@@ -1,5 +1,6 @@
 import type { LogMessage } from 'electron-log'
 import type { ProgressInfo, UpdateDownloadedEvent } from 'electron-updater'
+import type { AIProviderSetPayload, AIProviderState } from './aiProvider'
 import { IPC_CHANNELS } from './ipcChannels'
 
 export interface IpcChannels {
@@ -130,16 +131,19 @@ export interface IpcChannels {
     model: string
     apiKey: string
     customBaseURL?: string
+    requestId?: string
   }) => void
+  [IPC_CHANNELS.tasks.aiChat.abort]: (requestId: string) => void
   [IPC_CHANNELS.tasks.aiChat.stream]: (
     data:
       | {
           chunk: string
           type: 'content' | 'reasoning'
+          requestId?: string
         }
-      | { done: boolean },
+      | { done: boolean; requestId?: string; aborted?: boolean },
   ) => void
-  [IPC_CHANNELS.tasks.aiChat.error]: (data: { error: string }) => void
+  [IPC_CHANNELS.tasks.aiChat.error]: (data: { error: string; requestId?: string }) => void
 
   // 视频号上墙
   [IPC_CHANNELS.tasks.pinComment]: (params: { accountId: string; content: string }) => void
@@ -181,6 +185,12 @@ export interface IpcChannels {
   // Log
   [IPC_CHANNELS.log]: (message: LogMessage) => void
 
+  // AI 配置单一源（主进程 AIProviderStore）
+  [IPC_CHANNELS.aiProvider.get]: () => { state: AIProviderState; migrated: boolean }
+  [IPC_CHANNELS.aiProvider.set]: (payload: AIProviderSetPayload) => void
+  [IPC_CHANNELS.aiProvider.migrate]: (legacy: unknown) => AIProviderState
+  [IPC_CHANNELS.aiProvider.state]: (state: AIProviderState) => void
+
   // Shell（光圈式壳界面 guangquan-shell-ui-parity v3）
   [IPC_CHANNELS.shell.tabCreate]: (params: { url?: string; accountId?: string }) => number
   [IPC_CHANNELS.shell.tabClose]: (id: number) => void
@@ -189,6 +199,16 @@ export interface IpcChannels {
   [IPC_CHANNELS.shell.tabBack]: (id: number) => void
   [IPC_CHANNELS.shell.tabForward]: (id: number) => void
   [IPC_CHANNELS.shell.tabReload]: (id: number) => void
+  [IPC_CHANNELS.shell.tabMove]: (id: number, toIndex: number) => void
+  [IPC_CHANNELS.shell.tabCloseBatch]: (ids: number[]) => void
+  [IPC_CHANNELS.shell.tabReopen]: () => number | null
+  [IPC_CHANNELS.shell.panelDragBegin]: (startWidth: number, startScreenX: number) => void
+  [IPC_CHANNELS.shell.panelResize]: (screenX: number) => void
+  [IPC_CHANNELS.shell.panelResizeEnd]: () => void
+  [IPC_CHANNELS.shell.assistantToggle]: () => void
+  [IPC_CHANNELS.shell.assistantClose]: () => void
+  [IPC_CHANNELS.shell.assistantState]: (open: boolean) => void
+  [IPC_CHANNELS.shell.assistantReady]: () => void
   [IPC_CHANNELS.shell.tabsList]: () => ShellTabsState
   [IPC_CHANNELS.shell.tabsState]: (state: ShellTabsState) => void
   [IPC_CHANNELS.shell.windowMinimize]: () => void

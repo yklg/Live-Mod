@@ -8,7 +8,7 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
  * 注：本模块**不 import electron 运行时**（仅 `import type`），因此可直接在 vitest(node) 中实例化。
  * 保持这一点是 windowManager 可测的前提 —— 不要在类内 `import { app } from 'electron'`。
  */
-export type PushTarget = 'ui' | 'chrome' | 'notice'
+export type PushTarget = 'ui' | 'chrome' | 'notice' | 'assistant'
 
 /** 每个目标最多缓存的待发事件数 */
 const QUEUE_CAPACITY = 32
@@ -90,8 +90,20 @@ export class WindowManager {
     this.flush(name)
   }
 
+  /** 目标是否存在且存活（用于可选广播：assistant 未创建时不要触发丢弃告警）。 */
+  hasTarget(name: PushTarget): boolean {
+    const target = this.targets[name]
+    return !!target && !target.isDestroyed()
+  }
+
   clearUITarget() {
     this.targets = {}
+  }
+
+  /** 摘除单个目标（窗口销毁时调用，避免队列/诊断残留）。 */
+  clearTarget(name: PushTarget) {
+    delete this.targets[name]
+    delete this.pending[name]
   }
 
   /** 仅测试用：清空全部状态（单例跨用例复用时不残留） */

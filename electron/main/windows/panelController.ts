@@ -14,6 +14,8 @@ export interface RailState {
 export interface PanelControllerDeps {
   winSize: () => { w: number; h: number }
   hasActiveTab: () => boolean
+  /** 当前面板宽度；缺省 PANEL_W（旧调用点零变化）。 */
+  panelWidth?: () => number
   applyBounds: (b: ShellBounds) => void
   pushRail: (s: RailState) => void
 }
@@ -33,7 +35,13 @@ export function createPanelController(deps: PanelControllerDeps): PanelControlle
   const apply = () => {
     const { w, h } = deps.winSize()
     deps.applyBounds(
-      computeShellBounds({ winW: w, winH: h, panelOpen, activeTabPresent: deps.hasActiveTab() }),
+      computeShellBounds({
+        winW: w,
+        winH: h,
+        panelOpen,
+        activeTabPresent: deps.hasActiveTab(),
+        panelWidth: deps.panelWidth?.(),
+      }),
     )
     deps.pushRail({ panelOpen, routeId })
   }

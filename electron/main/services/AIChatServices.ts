@@ -52,14 +52,17 @@ export class AIChatService {
     return new AIChatService(apiKey, baseURL, provider)
   }
 
-  public async *chatStream(messages: ChatMessage[], model: string) {
+  public async *chatStream(messages: ChatMessage[], model: string, signal?: AbortSignal) {
     try {
       this.logger.debug('流式 chatStream 请求', { model })
-      const stream = await this.openai.chat.completions.create({
-        model,
-        messages,
-        stream: true,
-      })
+      const stream = await this.openai.chat.completions.create(
+        {
+          model,
+          messages,
+          stream: true,
+        },
+        { signal },
+      )
 
       let contentLength = 0
       let reasoningLength = 0

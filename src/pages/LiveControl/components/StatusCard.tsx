@@ -1,8 +1,19 @@
 import { useMemoizedFn } from 'ahooks'
-import { ArrowLeftRight, CheckIcon, ChevronDown, CircleAlert, GlobeIcon, XIcon } from 'lucide-react'
-import React, { useState } from 'react'
+import { ArrowLeftRight, ChevronDown, CircleAlert, GlobeIcon, XIcon } from 'lucide-react'
+import React from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -68,9 +79,9 @@ const StatusCard = React.memo(() => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="flex items-center justify-between @xl/panel:flex-wrap @xl/panel:gap-2">
+          <div className="flex flex-col gap-3 @3xl/panel:flex-row @3xl/panel:items-center @3xl/panel:justify-between">
             <ConnectState />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <PlatformSelect />
               <PlatformSwitchButton />
               <ConnectToLiveControl />
@@ -181,27 +192,27 @@ const ConnectButton = React.memo(
 )
 
 const DisconnectButton = React.memo(({ handleButtonClick }: { handleButtonClick: () => void }) => {
-  const [isHovered, setIsHovered] = useState(false)
   return (
-    <Button
-      variant="secondary"
-      onClick={handleButtonClick}
-      size="sm"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {isHovered ? (
-        <>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="secondary" size="sm">
           <XIcon className="mr-2 h-4 w-4" />
-          断开连接
-        </>
-      ) : (
-        <>
-          <CheckIcon className="mr-2 h-4 w-4" />
-          已连接
-        </>
-      )}
-    </Button>
+          断开
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认断开直播控制台？</AlertDialogTitle>
+          <AlertDialogDescription>
+            断开后，自动发言、自动回复、自动弹窗将无法继续驱动当前中控台。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction onClick={handleButtonClick}>确认断开</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 })
 

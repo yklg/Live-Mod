@@ -93,6 +93,12 @@ export interface ShellTabManager {
     popupOrigins?: readonly string[]
   }): number
   closeTab(id: number): void
+  /** 批量关闭；逐个走 close 的迁移/不变量逻辑（关闭全部时由 close 重建空白 Tab）。 */
+  closeBatch(ids: readonly number[]): void
+  /** 仅重开最近关闭的 free/popup Tab；账号 Tab 由账号上下文恢复，不入栈。 */
+  reopenLast(): number | null
+  /** 只重排数组：不改 active/mounted，不触发重排，只推 state。 */
+  moveTab(id: number, toIndex: number): void
   activateTab(id: number): void
   navigate(id: number, url: string): Promise<void>
   goBack(id: number): void
@@ -139,10 +145,21 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     view: TabView
     /** 是否已挂载到容器（后台 Tab 延迟挂载：避免隐藏 view 夺走/清空键盘焦点） */
     mounted: boolean
+    partition: string
+    popupOrigins?: readonly string[]
   }
+  interface ClosedTab {
+    url: string
+    title: string
+    kind: 'free' | 'popup'
+    partition: string
+    popupOrigins?: readonly string[]
+  }
+  const CLOSED_LIMIT = 10
   let seq = 0
   let activeId = 0
   const tabs: Tab[] = []
+  const closedStack: ClosedTab[] = []
   const accountIndex = new Map<string, number>()
   let pushScheduled = false
 
@@ -247,7 +264,15 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     // 且无法恢复（isFocused 全 false）——后台 Tab 不挂载即可完全避免该副作用，用户切换到该 Tab 时再挂载。
     const mountNow = foreground
     if (mountNow) deps.mount(view, 0) // 层级铁律：pageView 恒 index 0
-    tabs.push({ id, kind, accountId: opts.accountId ?? null, view, mounted: mountNow })
+    tabs.push({
+      id,
+      kind,
+      accountId: opts.accountId ?? null,
+      view,
+      mounted: mountNow,
+      partition,
+      popupOrigins: opts.popupOrigins,
+    })
     if (opts.accountId) accountIndex.set(opts.accountId, id)
     const prevActiveId = activeId
     activeId = id
@@ -270,6 +295,17 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     const idx = tabs.findIndex(t => t.id === id)
     if (idx < 0) return // 幂等：未知/已关 id 空操作（TC-T4）
     const [t] = tabs.splice(idx, 1)
+    // 账号 Tab 由账号上下文恢复，不入重开栈；free/popup 保留 URL/partition 以支持 Cmd+Shift+T。
+    if (t.kind !== 'account') {
+      closedStack.push({
+        url: t.view.webContents.getURL(),
+        title: t.view.webContents.getTitle(),
+        kind: t.kind,
+        partition: t.partition,
+        popupOrigins: t.popupOrigins,
+      })
+      if (closedStack.length > CLOSED_LIMIT) closedStack.shift()
+    }
     if (t.accountId) accountIndex.delete(t.accountId)
     if (t.mounted) deps.unmount(t.view)
     if (tabs.length === 0) {
@@ -286,6 +322,32 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     deps.requestLayout()
   }
 
+  const closeBatch = (ids: readonly number[]) => {
+    for (const id of new Set(ids)) close(id)
+  }
+
+  const reopenLast = (): number | null => {
+    const closed = closedStack.pop()
+    if (!closed) return null
+    return create({
+      url: closed.url,
+      kind: closed.kind,
+      partition: closed.partition,
+      popupOrigins: closed.popupOrigins,
+      activate: true,
+    })
+  }
+
+  const moveTab = (id: number, toIndex: number) => {
+    const from = tabs.findIndex(t => t.id === id)
+    if (from < 0) return
+    const to = Math.max(0, Math.min(tabs.length - 1, Math.round(toIndex)))
+    if (to === from) return
+    const [t] = tabs.splice(from, 1)
+    tabs.splice(to, 0, t)
+    pushNow()
+  }
+
   return {
     createTab: create,
     createPopupTab(opts) {
@@ -298,6 +360,9 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
       })
     },
     closeTab: close,
+    closeBatch,
+    reopenLast,
+    moveTab,
     activateTab(id) {
       const t = find(id)
       if (!t || !alive(t) || t.id === activeId) return

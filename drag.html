@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <title>Live Mod Panel Drag Conductor</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        cursor: col-resize;
+        user-select: none;
+      }
+      #drag {
+        position: fixed;
+        inset: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="drag"></div>
+    <script>
+      // 透明导体：只负责在拖拽期间捕获指针并把 screenX 交给主进程。
+      // 不 import 任何业务模块；preload 暴露的 invoke 是唯一出口。
+      var root = document.getElementById('drag')
+      root.addEventListener('pointermove', function (e) {
+        if ((e.buttons & 1) === 0) return
+        void window.ipcRenderer.invoke('shell:panelResize', e.screenX)
+      })
+      root.addEventListener('pointerup', function () {
+        void window.ipcRenderer.invoke('shell:panelResizeEnd')
+      })
+      root.addEventListener('pointercancel', function () {
+        void window.ipcRenderer.invoke('shell:panelResizeEnd')
+      })
+    </script>
+  </body>
+</html>

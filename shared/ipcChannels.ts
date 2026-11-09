@@ -26,6 +26,7 @@ export const IPC_CHANNELS = {
       chat: 'tasks:aiChat:chat',
       stream: 'tasks:aiChat:stream',
       error: 'tasks:aiChat:error',
+      abort: 'tasks:aiChat:abort',
       normalChat: 'tasks:aiChat:normalChat',
       testApiKey: 'tasks:aiChat:testApiKey',
     },
@@ -86,6 +87,13 @@ export const IPC_CHANNELS = {
     getProviders: 'app:getProviders',
     providersUpdated: 'app:providersUpdated',
   },
+  // AI 配置单一源（主进程 AIProviderStore）：渲染层只做 IPC 缓存
+  aiProvider: {
+    get: 'aiProvider:get',
+    set: 'aiProvider:set',
+    migrate: 'aiProvider:migrate',
+    state: 'aiProvider:state',
+  },
   // 光圈式壳界面（guangquan-shell-ui-parity v3）：chrome/rail 双入口与 Tab 归属通道
   shell: {
     tabCreate: 'shell:tabCreate',
@@ -95,6 +103,16 @@ export const IPC_CHANNELS = {
     tabBack: 'shell:tabBack',
     tabForward: 'shell:tabForward',
     tabReload: 'shell:tabReload',
+    tabMove: 'shell:tabMove',
+    tabCloseBatch: 'shell:tabCloseBatch',
+    tabReopen: 'shell:tabReopen',
+    panelDragBegin: 'shell:panelDragBegin',
+    panelResize: 'shell:panelResize',
+    panelResizeEnd: 'shell:panelResizeEnd',
+    assistantToggle: 'shell:assistantToggle',
+    assistantClose: 'shell:assistantClose',
+    assistantState: 'shell:assistantState',
+    assistantReady: 'shell:assistantReady',
     tabsList: 'shell:tabsList',
     tabsState: 'shell:tabsState',
     windowMinimize: 'shell:windowMinimize',

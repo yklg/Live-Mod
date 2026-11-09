@@ -1,7 +1,8 @@
-import { Settings2 } from 'lucide-react'
+import { MessagesSquare, Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { autoReplyPlatforms } from '@/abilities'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Page } from '@/components/common/Page'
 import { TaskButton } from '@/components/common/TaskButton'
 import { Button } from '@/components/ui/button'
@@ -26,7 +27,16 @@ export default function AutoReply() {
 
   const platform = useCurrentLiveControl(context => context.platform)
   if (!autoReplyPlatforms.includes(platform)) {
-    return null
+    return (
+      <Page title="自动回复" description="查看直播间的实时评论并自动回复">
+        <EmptyState
+          className="min-h-[320px]"
+          icon={MessagesSquare}
+          title="当前平台暂不支持自动回复"
+          description="自动回复目前支持抖音小店、巨量百应、视频号和小红书。切换平台后再试。"
+        />
+      </Page>
+    )
   }
 
   return (

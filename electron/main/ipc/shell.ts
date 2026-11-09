@@ -15,14 +15,24 @@ import { accountTabPartition } from '#/windows/shellTabManager'
 import {
   getContainer,
   isShellUIEnabled,
+  shellAssistantClose,
+  shellAssistantReady,
+  shellAssistantToggle,
+  shellPanelDragBegin,
+  shellPanelResize,
+  shellPanelResizeEnd,
   shellRailToggle,
+  shellRestoreLayout,
   shellTabActivate,
   shellTabBack,
   shellTabClose,
+  shellTabCloseBatch,
   shellTabCreate,
   shellTabForward,
+  shellTabMove,
   shellTabNavigate,
   shellTabReload,
+  shellTabReopen,
   shellTabsList,
 } from '#/windows/shellUI'
 
@@ -36,6 +46,19 @@ function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.tabBack, (_, id) => shellTabBack(id))
   typedIpcMainHandle(IPC_CHANNELS.shell.tabForward, (_, id) => shellTabForward(id))
   typedIpcMainHandle(IPC_CHANNELS.shell.tabReload, (_, id) => shellTabReload(id))
+  typedIpcMainHandle(IPC_CHANNELS.shell.tabMove, (_, id, toIndex) => shellTabMove(id, toIndex))
+  typedIpcMainHandle(IPC_CHANNELS.shell.tabCloseBatch, (_, ids) => shellTabCloseBatch(ids))
+  typedIpcMainHandle(IPC_CHANNELS.shell.tabReopen, () => shellTabReopen())
+  typedIpcMainHandle(IPC_CHANNELS.shell.panelDragBegin, (_, startWidth, startScreenX) =>
+    shellPanelDragBegin(startWidth, startScreenX),
+  )
+  typedIpcMainHandle(IPC_CHANNELS.shell.panelResize, (_, screenX) => shellPanelResize(screenX))
+  typedIpcMainHandle(IPC_CHANNELS.shell.panelResizeEnd, () => shellPanelResizeEnd())
+  typedIpcMainHandle(IPC_CHANNELS.shell.assistantToggle, () => {
+    shellAssistantToggle()
+  })
+  typedIpcMainHandle(IPC_CHANNELS.shell.assistantClose, () => shellAssistantClose())
+  typedIpcMainHandle(IPC_CHANNELS.shell.assistantReady, event => shellAssistantReady(event.sender))
   typedIpcMainHandle(IPC_CHANNELS.shell.tabsList, () => shellTabsList())
   typedIpcMainHandle(IPC_CHANNELS.shell.railToggle, (_, routeId) => shellRailToggle(routeId))
   typedIpcMainHandle(IPC_CHANNELS.shell.uiStatus, () => isShellUIEnabled())
@@ -53,6 +76,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.railReady, () => {
     if (!isShellUIEnabled()) return
     handleRailReady()
+    shellRestoreLayout()
   })
 
   // ---- 壳级通知层（shell-ui-polish v3）----

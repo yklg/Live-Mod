@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   CHROME_H,
+  clampPanelWidth,
   computeEntryBounds,
   computeShellBounds,
   DEGRADE_W,
+  degradeThreshold,
+  draggedPanelWidth,
   MIN_WIN_WIDTH,
   PAGE_MIN,
+  PANEL_MAX,
+  PANEL_MIN,
+  PANEL_VISIBLE_MIN,
   PANEL_W,
   RAIL_W,
 } from '#/windows/shellLayout'
@@ -15,7 +21,13 @@ import {
 // 唯一真源：所有 view bounds 由本函数产出，shellUI 只做 setBounds 执行（禁止在别处算几何）。
 // 断言格式：bounds = {x,y,width,height}（Electron setBounds 同形）。
 
-type Input = { winW: number; winH: number; panelOpen: boolean; activeTabPresent: boolean }
+type Input = {
+  winW: number
+  winH: number
+  panelOpen: boolean
+  activeTabPresent: boolean
+  panelWidth?: number
+}
 const base = (o: Partial<Input>): Input => ({
   winW: 1440,
   winH: 800,
@@ -44,19 +56,32 @@ describe('shellLayout 决策表（TC-L1~L9）', () => {
       },
     ],
     [
-      'L3 恰 DEGRADE_W(656) 展开不降级',
+      'L3 656 展开仍 overlay（600 钳到 PANEL_MIN）',
       base({ winW: DEGRADE_W, panelOpen: true }),
       {
-        rail: { x: DEGRADE_W - PANEL_W, y: CHROME_H, width: PANEL_W, height: 800 - CHROME_H },
+        rail: { x: DEGRADE_W - PANEL_MIN, y: CHROME_H, width: PANEL_MIN, height: 800 - CHROME_H },
         page: { x: 0, y: CHROME_H, width: DEGRADE_W - RAIL_W, height: 800 - CHROME_H },
       },
     ],
     [
-      'L4 DEGRADE_W-1(655) 展开降级全宽',
+      'L4 655 展开为 overlay（PANEL_MIN 钳制）',
       base({ winW: DEGRADE_W - 1, panelOpen: true }),
       {
-        rail: { x: 0, y: CHROME_H, width: DEGRADE_W - 1, height: 800 - CHROME_H },
+        rail: {
+          x: DEGRADE_W - 1 - PANEL_MIN,
+          y: CHROME_H,
+          width: PANEL_MIN,
+          height: 800 - CHROME_H,
+        },
         page: { x: 0, y: CHROME_H, width: DEGRADE_W - 1 - RAIL_W, height: 800 - CHROME_H },
+      },
+    ],
+    [
+      'L4b 475 展开降级全宽（< PANEL_MIN+RAIL_W）',
+      base({ winW: PANEL_MIN + RAIL_W - 1, panelOpen: true }),
+      {
+        rail: { x: 0, y: CHROME_H, width: PANEL_MIN + RAIL_W - 1, height: 800 - CHROME_H },
+        page: { x: 0, y: CHROME_H, width: PANEL_MIN - 1, height: 800 - CHROME_H },
       },
     ],
     [
@@ -76,10 +101,10 @@ describe('shellLayout 决策表（TC-L1~L9）', () => {
       },
     ],
     [
-      'L7 696 展开为 overlay（696 ≥ DEGRADE_W）',
+      'L7 696 展开为 overlay（PANEL_MIN 钳制）',
       base({ winW: 696, panelOpen: true }),
       {
-        rail: { x: 696 - PANEL_W, y: CHROME_H, width: PANEL_W, height: 800 - CHROME_H },
+        rail: { x: 696 - PANEL_MIN, y: CHROME_H, width: PANEL_MIN, height: 800 - CHROME_H },
         page: { x: 0, y: CHROME_H, width: PAGE_MIN, height: 800 - CHROME_H },
       },
     ],
@@ -103,19 +128,76 @@ describe('shellLayout 决策表（TC-L1~L9）', () => {
     })
   }
 
-  it('TC-L9 [边界值] DEGRADE_W=656：656 不降级 / 655 降级', () => {
+  it('TC-L9 [边界值] 实际降级阈值跟随面板宽度（默认 600 → 656；最小 420 → 476）', () => {
     expect(PANEL_W).toBe(600)
+    expect(PANEL_MIN).toBe(420)
     expect(DEGRADE_W).toBe(PANEL_W + RAIL_W)
-    expect(computeShellBounds(base({ winW: DEGRADE_W, panelOpen: true })).rail.width).toBe(PANEL_W)
-    expect(computeShellBounds(base({ winW: DEGRADE_W - 1, panelOpen: true })).rail.width).toBe(
-      DEGRADE_W - 1,
+    expect(degradeThreshold(PANEL_MIN)).toBe(PANEL_MIN + RAIL_W)
+    expect(computeShellBounds(base({ winW: PANEL_MIN + RAIL_W, panelOpen: true })).rail.width).toBe(
+      PANEL_MIN,
     )
+    expect(
+      computeShellBounds(base({ winW: PANEL_MIN + RAIL_W - 1, panelOpen: true })).rail.width,
+    ).toBe(PANEL_MIN + RAIL_W - 1)
   })
 
-  it('TC-L14b [死分支文档化] 实际最小窗 1024 > DEGRADE_W（降级仅在手动缩窗 <1024 的旧窗口模型下可达）', () => {
+  it('TC-L14b [死分支文档化] 实际最小窗 1024 > DEGRADE_W；1024 下默认宽度钳到 648', () => {
     // 与 electron/main/app.ts minWidth 对齐；常量漂移时该断言提醒同步注释/验收口径
     expect(1024).toBeGreaterThan(DEGRADE_W)
-    expect(computeShellBounds(base({ winW: 1024, panelOpen: true })).rail.width).toBe(PANEL_W)
+    expect(computeShellBounds(base({ winW: 1024, panelOpen: true })).rail.width).toBe(
+      clampPanelWidth(PANEL_W, 1024),
+    )
+  })
+})
+
+describe('可变面板宽度（TC-L17~L20）', () => {
+  it('TC-L17 [clampPanelWidth] 1024/1280/1440 三档与非法输入', () => {
+    expect(clampPanelWidth(600, 1024)).toBe(600)
+    expect(clampPanelWidth(600, 1280)).toBe(600)
+    expect(clampPanelWidth(600, 1440)).toBe(600)
+    expect(clampPanelWidth(900, 1024)).toBe(648)
+    expect(clampPanelWidth(900, 1280)).toBe(880)
+    expect(clampPanelWidth(420, 1024)).toBe(420)
+    expect(clampPanelWidth(-1, 1280)).toBe(PANEL_MIN)
+    expect(clampPanelWidth(Number.NaN, 1280)).toBe(PANEL_W)
+    expect(clampPanelWidth(Number.POSITIVE_INFINITY, 1280)).toBe(PANEL_W)
+  })
+
+  it('TC-L18 [可见页宽下限] 1024/1280/1440 下可见页宽 >= PANEL_VISIBLE_MIN', () => {
+    for (const [winW, panelW] of [
+      [1024, 648],
+      [1280, 880],
+      [1440, 880],
+    ] as const) {
+      const r = computeShellBounds(base({ winW, panelOpen: true, panelWidth: panelW }))
+      expect(r.rail.width).toBe(panelW)
+      const visible = (r.page?.width ?? 0) - panelW
+      expect(visible).toBeGreaterThanOrEqual(PANEL_VISIBLE_MIN)
+    }
+  })
+
+  it('TC-L19 [宽度跟随窗口钳制] 880 只在 winW>=1256 成立，1255 按可见页宽钳到 879', () => {
+    expect(clampPanelWidth(PANEL_MAX, 1256)).toBe(PANEL_MAX)
+    expect(clampPanelWidth(PANEL_MAX, 1255)).toBe(879)
+    expect(
+      computeShellBounds(base({ winW: 1256, panelOpen: true, panelWidth: PANEL_MAX })).rail.width,
+    ).toBe(PANEL_MAX)
+    expect(
+      computeShellBounds(base({ winW: 1255, panelOpen: true, panelWidth: PANEL_MAX })).rail.width,
+    ).toBe(879)
+  })
+
+  it('TC-L20 [overlay 语义] panelWidth 变化不改 page bounds', () => {
+    const closed = computeShellBounds(base({ winW: 1280 }))
+    const open = computeShellBounds(base({ winW: 1280, panelOpen: true, panelWidth: PANEL_MAX }))
+    expect(open.page).toEqual(closed.page)
+  })
+
+  it('TC-L21 [拖拽算术] 向左拖变宽、向右拖变窄、零位移不变', () => {
+    expect(draggedPanelWidth(600, 1000, 900)).toBe(700)
+    expect(draggedPanelWidth(600, 1000, 1100)).toBe(500)
+    expect(draggedPanelWidth(600, 1000, 1000)).toBe(600)
+    expect(clampPanelWidth(draggedPanelWidth(600, 1000, 0), 1024)).toBe(648)
   })
 })
 

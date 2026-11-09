@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { AppWindow, Bot, Gift, MessageSquare, MonitorPlay, Reply, Settings } from 'lucide-react'
+import { AppWindow, Gift, MessageSquare, MonitorPlay, Reply, Settings } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router'
 import { autoReplyPlatforms } from '@/abilities'
 import { useCurrentAutoMessage } from '@/hooks/useAutoMessage'
@@ -89,7 +89,6 @@ export default function Sidebar() {
         },
       ],
     },
-    { label: '智能', items: [{ id: '/ai-chat', name: 'AI 助手', icon: Bot }] },
     { label: '系统', items: [{ id: '/settings', name: '应用设置', icon: Settings }] },
   ]
 

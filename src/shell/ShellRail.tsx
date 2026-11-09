@@ -11,7 +11,6 @@ import {
   MessageCircle,
   MessagesSquare,
   Settings,
-  Sparkles,
   Tv,
   X,
 } from 'lucide-react'
@@ -19,10 +18,10 @@ import { useEffect, useState } from 'react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import type { ShellRailState } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { SHELL_RAIL_ROUTES, SHELL_ROUTES, type ShellRouteId } from 'shared/shellRoutes'
 import { useGlobalIpcListener } from '@/App'
 import { Toaster } from '@/components/ui/toaster'
 import { UpdateDialog } from '@/components/update/UpdateDialog'
-import AIChat from '@/pages/AIChat'
 import AutoMessage from '@/pages/AutoMessage'
 import AutoPopUp from '@/pages/AutoPopUp'
 import AutoReply from '@/pages/AutoReply'
@@ -34,6 +33,28 @@ import SettingsPage from '@/pages/SettingsPage'
 
 const GITHUB_URL = 'https://github.com/yklg/Live-Mod'
 
+const ROUTE_ICONS: Record<ShellRouteId, React.ComponentType<{ className?: string }>> = {
+  live: Tv,
+  popup: Gift,
+  message: Megaphone,
+  reply: MessagesSquare,
+  'reply-settings': MessagesSquare,
+  interaction: MessageCircle,
+  settings: Settings,
+  'red-packet': Gift,
+}
+
+const ROUTE_ELEMENTS: Record<ShellRouteId, React.ReactNode> = {
+  live: <LiveControl />,
+  popup: <AutoPopUp />,
+  message: <AutoMessage />,
+  reply: <AutoReply />,
+  'reply-settings': <AutoReplySettings />,
+  interaction: <LiveInteraction />,
+  settings: <SettingsPage />,
+  'red-packet': <RedPacket />,
+}
+
 interface RailItem {
   id: string
   icon: React.ComponentType<{ className?: string }>
@@ -43,13 +64,12 @@ interface RailItem {
 }
 
 const ITEMS: RailItem[] = [
-  { id: 'live', icon: Tv, label: '中控台', path: '/' },
-  { id: 'popup', icon: Gift, label: '自动弹窗', path: '/auto-popup' },
-  { id: 'msg', icon: Megaphone, label: '自动发言', path: '/auto-message' },
-  { id: 'reply', icon: MessagesSquare, label: '自动回复', path: '/auto-reply' },
-  { id: 'interaction', icon: MessageCircle, label: '直播互动', path: '/live-interaction' },
-  { id: 'ai', icon: Sparkles, label: 'AI 助手', path: '/ai-chat' },
-  { id: 'set', icon: Settings, label: '账号/设置', path: '/settings' },
+  ...SHELL_RAIL_ROUTES.map(route => ({
+    id: route.id,
+    icon: ROUTE_ICONS[route.id],
+    label: route.label,
+    path: route.path,
+  })),
   { id: 'help', icon: HelpCircle, label: '帮助', external: true },
 ]
 
@@ -81,7 +101,24 @@ export function ShellRailRoot() {
   }, [rail.panelOpen])
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div className="relative flex h-screen w-screen overflow-hidden bg-background text-foreground">
+      {rail.panelOpen && (
+        // biome-ignore lint/a11y/useSemanticElements: 可拖拽分隔条需要指针事件，<hr> 不能承载拖拽交互
+        <div
+          data-testid="panel-drag-handle"
+          role="separator"
+          aria-label="调整面板宽度"
+          className="absolute left-0 top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
+          onPointerDown={e => {
+            e.preventDefault()
+            void window.ipcRenderer.invoke(
+              IPC_CHANNELS.shell.panelDragBegin,
+              window.innerWidth,
+              e.screenX,
+            )
+          }}
+        />
+      )}
       <MemoryRouter initialEntries={[ITEMS.find(i => i.id === rail.routeId)?.path ?? '/']}>
         <ShellRailLayout rail={rail} />
       </MemoryRouter>
@@ -132,15 +169,9 @@ function ShellRailLayout({ rail }: { rail: ShellRailState }) {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <Routes>
-              <Route path="/" element={<LiveControl />} />
-              <Route path="/auto-popup" element={<AutoPopUp />} />
-              <Route path="/auto-message" element={<AutoMessage />} />
-              <Route path="/auto-reply" element={<AutoReply />} />
-              <Route path="/auto-reply/settings" element={<AutoReplySettings />} />
-              <Route path="/live-interaction" element={<LiveInteraction />} />
-              <Route path="/ai-chat" element={<AIChat />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/red-packet" element={<RedPacket />} />
+              {SHELL_ROUTES.map(route => (
+                <Route key={route.id} path={route.path} element={ROUTE_ELEMENTS[route.id]} />
+              ))}
             </Routes>
           </div>
         </div>

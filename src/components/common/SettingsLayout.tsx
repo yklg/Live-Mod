@@ -38,10 +38,14 @@ export function SettingsLayout({
       data-testid="settings-layout"
       className={cn(
         'grid grid-cols-[172px_1fr] items-start gap-6 @xl/panel:grid-cols-[148px_1fr] @xl/panel:gap-4',
+        '@max-[560px]/panel:grid-cols-1 @max-[560px]/panel:gap-3',
         className,
       )}
     >
-      <nav aria-label="设置目录" className="sticky top-0 flex flex-col gap-1">
+      <nav
+        aria-label="设置目录"
+        className="sticky top-0 flex flex-col gap-1 @max-[560px]/panel:static @max-[560px]/panel:flex-row @max-[560px]/panel:flex-wrap"
+      >
         {sections.map(section => (
           <a
             key={section.id}

@@ -11,27 +11,48 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 // 零回归原则：**未在 CHANNEL_TRUST 声明的通道不执行来源校验**（52 处注册里 50 处行为完全不变）。
 
 /** 本地受信视图身份（pageView 官方远程页不在此列：无 preload + nodeIntegration:false，天然不可达） */
-export type ShellViewKind = 'rail' | 'chrome' | 'entry' | 'notice' | 'unknown'
+export type ShellViewKind =
+  | 'rail'
+  | 'chrome'
+  | 'entry'
+  | 'notice'
+  | 'drag'
+  | 'assistant'
+  | 'unknown'
 
 /**
  * 信任级别：
  * - `business-ui`：承载业务 UI 的本地视图（壳 rail 完整业务树）。评论面板只在 rail 渲染。
  * - chrome / entry / notice 只做壳级 UI，不需要业务通道 ⇒ 拒绝（缩小暴露面）。
  */
-export type TrustLevel = 'business-ui'
+export type TrustLevel = 'business-ui' | 'ai-ui' | 'shell-ui'
 
 const BUSINESS_UI_KINDS: readonly ShellViewKind[] = ['rail']
+const AI_UI_KINDS: readonly ShellViewKind[] = ['rail', 'assistant']
+const SHELL_UI_KINDS: readonly ShellViewKind[] = ['chrome', 'rail', 'assistant']
 
 export const CHANNEL_TRUST: Partial<Record<keyof IpcChannels, TrustLevel>> = {
   [IPC_CHANNELS.tasks.commentBackend.getState]: 'business-ui',
   [IPC_CHANNELS.tasks.commentBackend.send]: 'business-ui',
   [IPC_CHANNELS.tasks.commentBackend.debugInject]: 'business-ui',
+  // AI 配置/对话：rail（AutoReply）与 assistant（浮窗）都能用，chrome/entry/notice 不能。
+  [IPC_CHANNELS.tasks.aiChat.chat]: 'ai-ui',
+  [IPC_CHANNELS.tasks.aiChat.abort]: 'ai-ui',
+  [IPC_CHANNELS.tasks.aiChat.normalChat]: 'ai-ui',
+  [IPC_CHANNELS.tasks.aiChat.testApiKey]: 'ai-ui',
+  [IPC_CHANNELS.aiProvider.get]: 'ai-ui',
+  [IPC_CHANNELS.aiProvider.set]: 'ai-ui',
+  [IPC_CHANNELS.aiProvider.migrate]: 'ai-ui',
+  // 顶栏/浮窗控制：chrome 可发 toggle；close/ready 由 assistant 发，rail 仍保留入口。
+  [IPC_CHANNELS.shell.assistantToggle]: 'shell-ui',
+  [IPC_CHANNELS.shell.assistantClose]: 'shell-ui',
+  [IPC_CHANNELS.shell.assistantReady]: 'shell-ui',
 }
 
 /** URL → 视图身份。dev（http://host/rail.html）与 prod（file:///.../dist/rail.html）都命中。 */
 export function classifyViewUrl(url: string): ShellViewKind {
   if (!url) return 'unknown'
-  for (const kind of ['rail', 'chrome', 'entry', 'notice'] as const) {
+  for (const kind of ['rail', 'chrome', 'entry', 'notice', 'drag', 'assistant'] as const) {
     if (url.includes(`/${kind}.html`)) return kind
   }
   return 'unknown'
@@ -65,9 +86,14 @@ function assertTrustedSender(channel: keyof IpcChannels, event: IpcMainInvokeEve
   if (!level) return
 
   const kind = trustResolver ? trustResolver(event) : 'unknown'
-  const allowed = level === 'business-ui' ? BUSINESS_UI_KINDS.includes(kind) : false
+  const allowed =
+    level === 'business-ui'
+      ? BUSINESS_UI_KINDS.includes(kind)
+      : level === 'ai-ui'
+        ? AI_UI_KINDS.includes(kind)
+        : SHELL_UI_KINDS.includes(kind)
   if (!allowed) {
-    throw new Error(`IPC 拒绝：${String(channel)} 仅允许 business-ui 视图，实际来源 ${kind}`)
+    throw new Error(`IPC 拒绝：${String(channel)} 仅允许 ${level} 视图，实际来源 ${kind}`)
   }
 }
 

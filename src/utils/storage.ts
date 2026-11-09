@@ -21,7 +21,10 @@ export const STORAGE_KEYS = {
   CHROME_CONFIG: 'chrome-config',
 
   // 全局配置（不按账号存储）
+  /** 旧 provider 配置键：仅作为一次性迁移输入（主进程 AIProviderStore 接管后不再写） */
   AI_CHAT: 'ai-chat-storage',
+  /** AI 对话消息（与 provider 配置分离，避免覆盖） */
+  AI_CHAT_MESSAGES: 'ai-chat-messages-storage',
   UPDATE: 'update-storage',
   DEV_MODE: 'dev-mode-storage',
   // 一键发红包页内 persist（RedPacket/index.tsx）。

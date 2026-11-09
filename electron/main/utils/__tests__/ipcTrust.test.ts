@@ -121,6 +121,40 @@ describe('IPC 授权矩阵（TC-TR1~TR7）', () => {
 
     expect(() => call(RESTRICTED, DEV_RAIL)).toThrow(/实际来源 chrome/)
   })
+
+  it('TC-TR8 ai-ui：rail/assistant 放行；chrome/entry/notice 拒绝', () => {
+    typedIpcMainHandle(IPC_CHANNELS.tasks.aiChat.chat, (() => {}) as never)
+    for (const url of [
+      DEV_RAIL,
+      'file:///Applications/Live%20Mod/dist/assistant.html?view=assistant',
+    ]) {
+      expect(() => call(IPC_CHANNELS.tasks.aiChat.chat, url)).not.toThrow()
+    }
+    for (const url of [
+      'http://localhost:5173/chrome.html?view=chrome',
+      'http://localhost:5173/entry.html?view=entry',
+      'file:///app/dist/notice.html?view=notice',
+    ]) {
+      expect(() => call(IPC_CHANNELS.tasks.aiChat.chat, url)).toThrow(/仅允许 ai-ui/)
+    }
+  })
+
+  it('TC-TR9 shell-ui：chrome/rail/assistant 放行；entry/notice 拒绝', () => {
+    typedIpcMainHandle(IPC_CHANNELS.shell.assistantToggle, (() => {}) as never)
+    for (const url of [
+      'http://localhost:5173/chrome.html?view=chrome',
+      DEV_RAIL,
+      'file:///Applications/Live%20Mod/dist/assistant.html?view=assistant',
+    ]) {
+      expect(() => call(IPC_CHANNELS.shell.assistantToggle, url)).not.toThrow()
+    }
+    for (const url of [
+      'http://localhost:5173/entry.html?view=entry',
+      'file:///app/dist/notice.html?view=notice',
+    ]) {
+      expect(() => call(IPC_CHANNELS.shell.assistantToggle, url)).toThrow(/仅允许 shell-ui/)
+    }
+  })
 })
 
 describe('classifyViewUrl（P0-1 判据回归）', () => {
@@ -136,5 +170,10 @@ describe('classifyViewUrl（P0-1 判据回归）', () => {
     expect(classifyViewUrl(PROD_CLASSIC)).toBe('unknown')
     expect(classifyViewUrl(DEV_CLASSIC)).toBe('unknown')
     expect(classifyViewUrl('http://localhost:5173/')).toBe('unknown')
+  })
+
+  it('assistant / drag 本地视图身份可识别（不是 remote page）', () => {
+    expect(classifyViewUrl('file:///x/assistant.html')).toBe('assistant')
+    expect(classifyViewUrl('http://127.0.0.1:7777/drag.html')).toBe('drag')
   })
 })

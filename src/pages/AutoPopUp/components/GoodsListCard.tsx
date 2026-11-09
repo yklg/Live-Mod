@@ -1,12 +1,12 @@
 import { useMemoizedFn } from 'ahooks'
-import { PlusIcon } from 'lucide-react'
-import React from 'react'
+import { PackageOpen, PlusIcon } from 'lucide-react'
+import React, { useState } from 'react'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAutoPopUpActions, useCurrentAutoPopUp } from '@/hooks/useAutoPopUp'
-import { useToast } from '@/hooks/useToast'
 import GoodsListItem from './GoodsListItem'
 import ShortcutConfigTab from './ShortcutConfigTab'
 
@@ -14,7 +14,7 @@ const CommonList = () => {
   const goodsIds = useCurrentAutoPopUp(context => context.config.goodsIds)
   const goodsItems = useCurrentAutoPopUp(context => context.config.goodsItems)
   const { setGoodsIds, setGoodsItems } = useAutoPopUpActions()
-  const { toast } = useToast()
+  const [error, setError] = useState<string | null>(null)
 
   // 合并 goodsItems 和 goodsIds：以 goodsItems 为主，goodsIds 作为兼容
   const items = React.useMemo(() => {
@@ -31,13 +31,14 @@ const CommonList = () => {
   const handleGoodsIdChange = useMemoizedFn((index: number, value: string) => {
     const numValue = Number(value)
     if (Number.isNaN(numValue) || numValue < 1) {
-      toast.error('请输入有效的商品序号')
+      setError('请输入有效的商品序号')
       return
     }
     if (items.some((item, i) => item.id === numValue && i !== index)) {
-      toast.error('商品序号不能重复！')
+      setError('商品序号不能重复')
       return
     }
+    setError(null)
     const newItems = items.map((item, i) => (i === index ? { ...item, id: numValue } : item))
     syncUpdate(newItems)
   })
@@ -66,6 +67,7 @@ const CommonList = () => {
   const addGoodsId = useMemoizedFn(() => {
     let id = 1
     while (items.some(item => item.id === id)) id += 1
+    setError(null)
     syncUpdate([...items, { id, repeatCount: 1, itemInterval: undefined }])
   })
 
@@ -85,20 +87,35 @@ const CommonList = () => {
       </div>
 
       <div className="space-y-3">
-        {items.map((item, index) => (
-          <GoodsListItem
-            // biome-ignore lint/suspicious/noArrayIndexKey: 下标不影响
-            key={index}
-            item={item}
-            index={index}
-            onChangeId={handleGoodsIdChange}
-            onChangeRepeatCount={handleRepeatCountChange}
-            onChangeItemInterval={handleItemIntervalChange}
-            onDelete={() => {
-              syncUpdate(items.filter((_, i) => i !== index))
-            }}
+        {items.length === 0 ? (
+          <EmptyState
+            icon={PackageOpen}
+            title="还没有商品"
+            description="添加商品序号后，快捷键和自动弹窗才能使用。"
+            action={
+              <Button variant="outline" size="sm" onClick={addGoodsId}>
+                <PlusIcon className="mr-2 h-4 w-4" />
+                添加商品
+              </Button>
+            }
           />
-        ))}
+        ) : (
+          items.map((item, index) => (
+            <GoodsListItem
+              // biome-ignore lint/suspicious/noArrayIndexKey: 下标不影响
+              key={index}
+              item={item}
+              index={index}
+              onChangeId={handleGoodsIdChange}
+              onChangeRepeatCount={handleRepeatCountChange}
+              onChangeItemInterval={handleItemIntervalChange}
+              onDelete={() => {
+                syncUpdate(items.filter((_, i) => i !== index))
+              }}
+            />
+          ))
+        )}
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
     </>
   )

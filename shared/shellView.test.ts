@@ -17,8 +17,16 @@ describe('shellView 参数构造/解析（TC-VW-01/02）', () => {
     expect(SHELL_VIEW_ARG_PREFIX).toBe('--lm-view=')
   })
 
-  it('TC-VW-02a parseShellViewArg：五个合法视图名往返一致', () => {
-    for (const name of ['index', 'chrome', 'rail', 'entry', 'notice'] as const) {
+  it('TC-VW-02a parseShellViewArg：七个合法视图名往返一致', () => {
+    for (const name of [
+      'index',
+      'chrome',
+      'rail',
+      'entry',
+      'notice',
+      'drag',
+      'assistant',
+    ] as const) {
       expect(parseShellViewArg([buildShellViewArg(name)])).toBe(name)
       expect(parseShellViewArg(['electron', buildShellViewArg(name)])).toBe(name)
     }
@@ -35,7 +43,7 @@ describe('shellView 参数构造/解析（TC-VW-01/02）', () => {
 
   it('TC-VW-03 isShellUiView：仅 index 视为经典', () => {
     expect(isShellUiView('index')).toBe(false)
-    for (const name of ['chrome', 'rail', 'entry', 'notice'] as const) {
+    for (const name of ['chrome', 'rail', 'entry', 'notice', 'drag', 'assistant'] as const) {
       expect(isShellUiView(name)).toBe(true)
     }
   })

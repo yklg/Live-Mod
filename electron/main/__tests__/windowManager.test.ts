@@ -239,3 +239,23 @@ describe('windowManager 防递归与噪音（TC-WQ7 / WQ9）', () => {
     expect(lines).toEqual([])
   })
 })
+
+describe('assistant 具名目标（TC-WQ11）', () => {
+  it('sendTo/hasTarget/clearTarget：assistant 独立于 ui，不隐式回退', () => {
+    const { wm } = makeManager()
+    const assistantWc = makeWc('assistant')
+    const uiWc = makeWc('ui')
+    wm.setUITarget(asWc(uiWc))
+    wm.setTarget('assistant', asWc(assistantWc))
+
+    expect(wm.hasTarget('assistant')).toBe(true)
+    expect(sendTo(wm, 'assistant', NON_QUEUED, { done: true, requestId: 'r1' })).toBe(true)
+    expect(assistantWc.sent).toHaveLength(1)
+    expect(uiWc.sent).toHaveLength(0)
+
+    wm.clearTarget('assistant')
+    expect(wm.hasTarget('assistant')).toBe(false)
+    expect(sendTo(wm, 'assistant', NON_QUEUED, { done: true, requestId: 'r2' })).toBe(false)
+    expect(uiWc.sent).toHaveLength(0)
+  })
+})

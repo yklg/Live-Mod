@@ -161,6 +161,9 @@ async function createWindow() {
   // 当返回最新 providers 时推送到渲染进程（经 windowManager 路由到 rail 业务树，壳模式唯一目标）
   emitter.on('providers-updated', providers => {
     windowManager.send(IPC_CHANNELS.app.providersUpdated, providers)
+    if (windowManager.hasTarget('assistant')) {
+      windowManager.sendTo('assistant', IPC_CHANNELS.app.providersUpdated, providers)
+    }
   })
 }
 

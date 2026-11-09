@@ -1,8 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
-import { useState } from 'react'
 import { Page } from '@/components/common/Page'
 import { TaskButton } from '@/components/common/TaskButton'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAutoMessageActions, useCurrentAutoMessage } from '@/hooks/useAutoMessage'
 import { useTaskControl } from '@/hooks/useTaskControl'
 import MessageListCard from './components/MessageListCard'
@@ -26,7 +24,6 @@ const useAutoMessageTaskControl = () => {
 
 export default function AutoMessage() {
   const { isRunning, onStartTask, onStopTask } = useAutoMessageTaskControl()
-  const [validationError] = useState<string | null>(null)
 
   const handleTaskButtonClick = useMemoizedFn(() => {
     if (!isRunning) onStartTask()
@@ -39,13 +36,10 @@ export default function AutoMessage() {
       description="配置自动发送消息的规则"
       actions={<TaskButton isTaskRunning={isRunning} onStartStop={handleTaskButtonClick} />}
     >
-      {validationError && (
-        <Alert variant="destructive">
-          <AlertDescription>{validationError}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid gap-5 xl:grid-cols-[2fr_1fr] xl:items-start" data-testid="auto-grid">
+      <div
+        className="grid gap-5 xl:grid-cols-[2fr_1fr] xl:items-start @2xl/panel:grid-cols-[2fr_1fr] @2xl/panel:items-start"
+        data-testid="auto-grid"
+      >
         <MessageListCard />
         <div className="grid gap-5">
           <MessageSettingsCard />
