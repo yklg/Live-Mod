@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   defaultEnvMatrix,
   resolveConnectMode,
@@ -6,57 +6,56 @@ import {
 } from '#/platforms/envMatrix'
 import { createRuntimeEnvState } from '#/platforms/runtimeEnvState'
 
-// ===== mode 裁决决策表（A3：消费点唯一）+ 静态/运行时两层分离（A2）=====
-// 优先级链：payload.mode ?? (degraded ? 'launch' : envMatrix[platform] ?? 'launch')
+// ===== mode 裁决决策表（消费点唯一）+ 静态矩阵层（壳 v3 · Wave 1）=====
+// 优先级链：payload.mode ?? (shellUi && 白名单平台 ? 'attach' : envMatrix[platform] ?? 'launch')
 // 守护不变量：
-//   I9 显式 payload 永远赢（含 degraded 时人工指定 attach）
-//   I10 degraded 只影响裁决，永不回写静态矩阵
-//   I11 TTL 过期自动失效，下次连接重探
-//   I12 stealthOff 标记不改变 mode
+//   I9  显式 payload 永远赢（人工指定 attach 也赢）
+//   I10 裁决纯函数不写任何外部状态（静态矩阵逐键不变）
+//   I11 stealthOff 标记不改变 mode
+//   I12 **不存在 degraded 入参**——降级层已整体下线（计划 §3.3）
+//        「attach 失败就换外部浏览器」是"为什么还会出现回退降级"的根因，已删除。
+//
+// 壳 v3 · Wave 1 同步点（计划 §3.3 要求「断言 + 文件头优先级链注释 + docstring 三处同批」）：
+// 下面三条同源改写，缺一处就会让文档与行为再次漂移。
 
 const matrix = { douyin: 'attach', taobao: 'launch' } as const
 
 describe('resolveConnectMode 决策表（TC-U4）', () => {
   const cases: Array<[string, Parameters<typeof resolveConnectMode>[0], 'attach' | 'launch']> = [
     [
-      'payload=attach × degraded × matrix=attach',
-      { payloadMode: 'attach', platform: 'douyin', degraded: true, matrix },
+      'payload=attach × matrix=attach',
+      { payloadMode: 'attach', platform: 'douyin', matrix },
       'attach',
     ],
     [
-      'payload=attach × 无degraded × matrix=launch',
-      { payloadMode: 'attach', platform: 'taobao', degraded: false, matrix },
+      'payload=attach × matrix=launch（显式赢矩阵）',
+      { payloadMode: 'attach', platform: 'taobao', matrix },
       'attach',
     ],
     [
-      'payload=launch × degraded × matrix=attach',
-      { payloadMode: 'launch', platform: 'douyin', degraded: true, matrix },
+      'payload=launch × matrix=attach（显式赢矩阵）',
+      { payloadMode: 'launch', platform: 'douyin', matrix },
       'launch',
     ],
     [
-      '无payload × degraded × matrix=attach → 降级',
-      { platform: 'douyin', degraded: true, matrix },
-      'launch',
-    ],
-    [
-      '无payload × 无degraded × matrix=attach',
-      { platform: 'douyin', degraded: false, matrix },
+      '无payload × matrix=attach',
+      { platform: 'douyin', matrix },
       'attach',
     ],
     [
-      '无payload × 无degraded × matrix=launch',
-      { platform: 'taobao', degraded: false, matrix },
+      '无payload × matrix=launch',
+      { platform: 'taobao', matrix },
       'launch',
     ],
     [
       '无payload × matrix 无此平台 → 默认 launch',
-      { platform: 'kuaishou', degraded: false, matrix },
+      { platform: 'kuaishou', matrix },
       'launch',
     ],
     [
-      'degraded × matrix 无此平台 → launch',
-      { platform: 'kuaishou', degraded: true, matrix },
-      'launch',
+      'shellUi 关闭 × matrix=attach → 仍走矩阵（壳内默认层不生效）',
+      { platform: 'douyin', matrix, shellUiEnabled: false },
+      'attach',
     ],
   ]
   for (const [name, input, expected] of cases) {
@@ -64,10 +63,22 @@ describe('resolveConnectMode 决策表（TC-U4）', () => {
       expect(resolveConnectMode(input)).toBe(expected)
     })
   }
+
+  it('TC-U4-neg [无 degraded 入参] 裁决输入不接受降级开关', () => {
+    // 降级层已删除：入参里再出现 degraded 只会是调用方漏改，必须在类型层就红。
+    // （TS 层面已由 ConnectModeInput 约束；这里补运行时护栏：多余键不影响裁决）
+    expect(
+      resolveConnectMode({
+        platform: 'douyin',
+        matrix,
+        ...({ degraded: true } as Record<string, unknown>),
+      }),
+    ).toBe('attach')
+  })
 })
 
 // ===== 壳内默认层（shell-in-browser-login-default-attach v3 + shell-entry-platform-selector v1）=====
-// 优先级：payload ?? (shellUi && 白名单 ? attach（degraded 期除外） : 原链)
+// 优先级：payload ?? (shellUi && 白名单 ? attach : 矩阵)
 describe('resolveConnectMode 壳 UI 默认层（TC-S1~S9）', () => {
   it('TC-S1 [白名单固化] 抖音系三平台 = douyin + buyin + eos', () => {
     expect([...SHELL_DEFAULT_ATTACH_PLATFORMS].sort()).toEqual(['buyin', 'douyin', 'eos'])
@@ -76,7 +87,6 @@ describe('resolveConnectMode 壳 UI 默认层（TC-S1~S9）', () => {
     expect(
       resolveConnectMode({
         platform: 'douyin',
-        degraded: false,
         matrix: defaultEnvMatrix,
         shellUiEnabled: true,
       }),
@@ -86,7 +96,6 @@ describe('resolveConnectMode 壳 UI 默认层（TC-S1~S9）', () => {
     expect(
       resolveConnectMode({
         platform: 'buyin',
-        degraded: false,
         matrix: defaultEnvMatrix,
         shellUiEnabled: true,
       }),
@@ -96,28 +105,25 @@ describe('resolveConnectMode 壳 UI 默认层（TC-S1~S9）', () => {
     expect(
       resolveConnectMode({
         platform: 'kuaishou',
-        degraded: false,
         matrix: defaultEnvMatrix,
         shellUiEnabled: true,
       }),
     ).toBe('launch')
   })
-  it('TC-S5 [shellUi + 白名单 + degraded] → launch（降级期回外部，TTL 后自动回壳内）', () => {
+  it('TC-S5 [shellUi + 白名单] → attach（恒定，不再有"降级期回外部"分支）', () => {
     expect(
       resolveConnectMode({
         platform: 'douyin',
-        degraded: true,
         matrix: defaultEnvMatrix,
         shellUiEnabled: true,
       }),
-    ).toBe('launch')
+    ).toBe('attach')
   })
   it('TC-S6 [逃生口 payload=launch 赢过壳内默认层]', () => {
     expect(
       resolveConnectMode({
         payloadMode: 'launch',
         platform: 'douyin',
-        degraded: false,
         matrix: defaultEnvMatrix,
         shellUiEnabled: true,
       }),
@@ -125,7 +131,7 @@ describe('resolveConnectMode 壳 UI 默认层（TC-S1~S9）', () => {
   })
   it('TC-S7 [shellUi=false 经典逐键不变]', () => {
     for (const platform of ['douyin', 'buyin', 'kuaishou']) {
-      expect(resolveConnectMode({ platform, degraded: false, matrix: defaultEnvMatrix })).toBe(
+      expect(resolveConnectMode({ platform, matrix: defaultEnvMatrix })).toBe(
         defaultEnvMatrix[platform as keyof typeof defaultEnvMatrix] ?? 'launch',
       )
     }
@@ -136,61 +142,54 @@ describe('resolveConnectMode 壳 UI 默认层（TC-S1~S9）', () => {
     expect(
       resolveConnectMode({
         platform: 'eos',
-        degraded: false,
         matrix: defaultEnvMatrix,
         shellUiEnabled: true,
       }),
     ).toBe('attach')
   })
-  it('TC-S9 [shellUi + eos + degraded] → launch（降级期回外部，TTL 后自动回壳内）', () => {
+  it('TC-S9 [shellUi + eos] → attach（恒定，无降级分支）', () => {
     expect(
       resolveConnectMode({
         platform: 'eos',
-        degraded: true,
         matrix: defaultEnvMatrix,
         shellUiEnabled: true,
       }),
+    ).toBe('attach')
+  })
+
+  // CV-I10：白名单恒 attach、taobao 恒 launch——删掉 degraded 后这两条必须钉死
+  it('TC-S10 [白名单恒 attach] 壳 UI 开启时白名单平台恒为 attach', () => {
+    for (const platform of SHELL_DEFAULT_ATTACH_PLATFORMS) {
+      expect(
+        resolveConnectMode({ platform, matrix: defaultEnvMatrix, shellUiEnabled: true }),
+      ).toBe('attach')
+    }
+  })
+  it('TC-S11 [taobao 恒 launch] 不在白名单的平台恒不因壳 UI 变 attach', () => {
+    expect(
+      resolveConnectMode({ platform: 'taobao', matrix: defaultEnvMatrix, shellUiEnabled: true }),
     ).toBe('launch')
   })
 })
 
 describe('runtimeEnvState（TC-U5 ~ TC-U6, TC-U13）', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
-
-  it('TC-U5 [不回写] degrade 后静态矩阵逐键不变', () => {
+  it('TC-U5 [不回写] 裁决不修改静态矩阵', () => {
     const snapshot = { ...matrix }
-    const state = createRuntimeEnvState({ ttlMs: 60000 })
-    state.degrade('douyin')
+    resolveConnectMode({ platform: 'douyin', matrix })
     expect(matrix).toEqual(snapshot)
-    expect(
-      resolveConnectMode({ platform: 'douyin', degraded: state.isDegraded('douyin'), matrix }),
-    ).toBe('launch')
   })
 
-  it('TC-U6 [TTL] 过期后裁决恢复矩阵默认，且可重探', () => {
-    const state = createRuntimeEnvState({ ttlMs: 60000 })
-    state.degrade('douyin')
-    vi.advanceTimersByTime(60001)
-    expect(state.isDegraded('douyin')).toBe(false)
-    expect(
-      resolveConnectMode({ platform: 'douyin', degraded: state.isDegraded('douyin'), matrix }),
-    ).toBe('attach')
-  })
-
-  it('TC-U6b [显式清除] clear 立即失效', () => {
-    const state = createRuntimeEnvState({ ttlMs: 60000 })
-    state.degrade('douyin')
-    state.clear('douyin')
-    expect(state.isDegraded('douyin')).toBe(false)
+  it('TC-U5b [降级层已删除] runtimeEnvState 不再暴露 degrade/isDegraded/clear', () => {
+    const state = createRuntimeEnvState()
+    expect('degrade' in state).toBe(false)
+    expect('isDegraded' in state).toBe(false)
+    expect('clear' in state).toBe(false)
   })
 
   it('TC-U13 [F4] markStealthOff 记录标记且不影响 mode', () => {
-    const state = createRuntimeEnvState({ ttlMs: 60000 })
+    const state = createRuntimeEnvState()
     state.markStealthOff('douyin')
     expect(state.isStealthOff('douyin')).toBe(true)
-    expect(
-      resolveConnectMode({ platform: 'douyin', degraded: state.isDegraded('douyin'), matrix }),
-    ).toBe('attach')
+    expect(resolveConnectMode({ platform: 'douyin', matrix })).toBe('attach')
   })
 })

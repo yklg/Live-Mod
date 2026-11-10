@@ -9,22 +9,12 @@ const baseInput: ConnectPayloadInput = {
   headless: true,
   chromePath: '/Applications/Google Chrome.app',
   storageState: '/tmp/storage-state.json',
-  forceExternal: false,
 }
 
 // ===== mode 映射（经典模式移除后的口径）=====
-// 壳 UI 是唯一运行形态：连接方式的唯一用户可见开关是「强制外部浏览器」逃生口；
-// undefined = 不带 mode 键（而非 mode: undefined），交主进程裁决链（壳内默认层：抖音系默认 attach）。
-describe('buildConnectPayload · mode 映射（TC-CP1~CP2）', () => {
-  it.each([
-    [false, undefined],
-    [true, 'launch'],
-  ] as const)('forceExternal=%s → mode=%s', (forceExternal, expected) => {
-    const payload = buildConnectPayload({ ...baseInput, forceExternal })
-    expect(payload.mode).toBe(expected)
-  })
-})
-
+// 壳 v3 · Wave 1：「强制外部浏览器」逃生口已删除（TC-CP1/CP2 随之下线）。
+// 渲染层不再产出 mode，形态一律交主进程裁决链：
+// payload.mode ?? (壳 UI 开启且平台在白名单 → attach) ?? 静态矩阵 ?? 'launch'。
 describe('buildConnectPayload · 字段透传与 mode 缺省键（TC-CP9~CP12）', () => {
   it('TC-CP9 平台/账号/headless/chromePath/storageState 原样透传', () => {
     const payload = buildConnectPayload({
@@ -43,7 +33,7 @@ describe('buildConnectPayload · 字段透传与 mode 缺省键（TC-CP9~CP12）
     })
   })
 
-  it('TC-CP10 逃生口关 → 不带 mode 键（交主进程默认层裁决）', () => {
+  it('TC-CP10 渲染层永不带 mode 键（交主进程默认层裁决）', () => {
     const payload = buildConnectPayload(baseInput)
     expect(Object.hasOwn(payload, 'mode')).toBe(false)
     expect(payload).toStrictEqual({
@@ -53,19 +43,6 @@ describe('buildConnectPayload · 字段透传与 mode 缺省键（TC-CP9~CP12）
       platform: 'douyin',
       account,
     })
-  })
-
-  it('TC-CP11 逃生口开 → 键存在且值为 launch（显式外部浏览器）', () => {
-    const payload = buildConnectPayload({ ...baseInput, forceExternal: true })
-    expect(Object.hasOwn(payload, 'mode')).toBe(true)
-    expect(payload.mode).toBe('launch')
-  })
-
-  it('TC-CP12 renderer 从不显式发 attach（壳内登录由主进程白名单默认层裁决）', () => {
-    for (const forceExternal of [false, true]) {
-      const payload = buildConnectPayload({ ...baseInput, forceExternal })
-      expect(payload.mode).not.toBe('attach')
-    }
   })
 })
 
@@ -90,14 +67,14 @@ describe('buildConnectPayload · 淘宝强制关闭无头模式（TC-CP13~CP15�
 
 describe('buildConnectPayload · 纯性（TC-CP16~CP17）', () => {
   it('TC-CP16 不修改入参', () => {
-    const input: ConnectPayloadInput = { ...baseInput, forceExternal: true }
+    const input: ConnectPayloadInput = { ...baseInput }
     const snapshot = structuredClone(input)
     buildConnectPayload(input)
     expect(input).toStrictEqual(snapshot)
   })
 
   it('TC-CP17 同输入两次调用结果一致', () => {
-    const input: ConnectPayloadInput = { ...baseInput, forceExternal: true }
+    const input: ConnectPayloadInput = { ...baseInput }
     expect(buildConnectPayload(input)).toStrictEqual(buildConnectPayload(input))
   })
 })

@@ -123,9 +123,6 @@ const StatusCard = React.memo(() => {
           <div className="py-2">
             <HeadlessSetting />
           </div>
-          <div className="py-2">
-            <ShellModeSetting />
-          </div>
         </div>
       </PanelSection>
       <AdvancedSettings />
@@ -143,12 +140,11 @@ const AdvancedSettings = React.memo(() => {
             高级
           </span>
           <span className="text-[13px] font-medium">高级设置</span>
-          <span className="text-xs text-muted-foreground">无头模式 · 强制外部浏览器</span>
+          <span className="text-xs text-muted-foreground">无头模式</span>
           <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-data-[state=open]/adv:rotate-180" />
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-2 space-y-3 rounded-card border-hairline border-border bg-card px-3 py-3">
           <HeadlessSetting />
-          <ShellModeSetting />
         </CollapsibleContent>
       </Collapsible>
     )
@@ -156,7 +152,6 @@ const AdvancedSettings = React.memo(() => {
   return (
     <>
       <HeadlessSetting />
-      <ShellModeSetting />
     </>
   )
 })
@@ -302,29 +297,8 @@ const HeadlessSetting = () => {
 }
 
 /**
- * 「强制外部浏览器」逃生口（调试/风控兜底）：壳 UI 是唯一运行形态后，这是连接方式唯一的用户可见开关。
- * 旧经典模式的「壳模式（实验）」开关随经典模式一并移除 —— 壳内登录已是默认链路。
+ * 壳 v3 · Wave 1：「强制外部浏览器」逃生口已删除（计划 §3.4）。
+ * 形态由主进程裁决链决定（payload ?? 壳内默认层 ?? 静态矩阵），用户不再有手动开关。
  */
-const ShellModeSetting = () => {
-  const forceExternal = useCurrentChromeConfig(context => context.forceExternal ?? false)
-  const isConnected = useCurrentLiveControl(context => context.isConnected)
-  const { setForceExternal } = useCurrentChromeConfigActions()
-
-  return (
-    <div className="flex justify-between items-center">
-      <div>
-        <div className="text-sm">强制外部浏览器（调试用）</div>
-        <div className="text-muted-foreground text-xs">
-          连接默认在壳内浏览器登录（抖音系）；开启后改由外部 Chrome/Edge 承载
-        </div>
-      </div>
-      <Switch
-        checked={forceExternal}
-        disabled={isConnected !== 'disconnected'}
-        onCheckedChange={v => setForceExternal(v)}
-      />
-    </div>
-  )
-}
 
 export default StatusCard

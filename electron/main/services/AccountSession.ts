@@ -3,6 +3,8 @@ import { Notification, session } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { teardownSession } from '#/driver/types'
 import { TaskNotSupportedError } from '#/errors/AppError'
+import { ConnectionAbortedError } from '#/errors/ConnectionAbortedError'
+import type { SessionCloseReason } from '#/errors/connectionError'
 import { emitter } from '#/event/eventBus'
 import { createLogger } from '#/logger'
 import {
@@ -64,6 +66,19 @@ export class AccountSession {
   private commentBackendExitTimes: number[] = []
   /** 会话是否已断开：断开后不再自动重启 B2 */
   private sessionClosed = false
+  /**
+   * 连接判别式（壳 v3 · Wave 1 · P0-1）：connectId + AbortController。
+   *
+   * 为什么不用 `sessionClosed` 布尔做判别：它与 `page.on('close')` 事件回调链存在时序竞态，
+   * 且语义过宽（它表示"会话已关"，不表示"这次连接是被谁中止的"）。
+   * AbortController 的 `signal.aborted` 在 `abort()` 的那一刻同步置位，
+   * 且 `abort(reason)` 能带上关闭来源，从而把「用户主动断开」与「页面被外部关闭」分成两类。
+   */
+  private connectAbort: AbortController | null = null
+  /** 本次连接的令牌：进结构化日志，串联「发起 → 中止 → 失败」 */
+  private connectId: string | null = null
+  /** 连接序号（同一账号第几次连接）：写进 connectId 便于人眼定位 */
+  private connectSeq = 0
 
   constructor(
     platformName: LiveControlPlatform,
@@ -79,6 +94,13 @@ export class AccountSession {
     this.pageOffControl = false
     this.leaveControlWarned = false
     const mode: ExecMode = config.mode ?? 'launch'
+    // 连接判别式（壳 v3 · Wave 1 · P0-1）：本次连接一个令牌 + 一个中止信号。
+    // 先中止上一轮未完成的连接（重连场景），再挂新的。
+    this.connectAbort?.abort('internal')
+    const controller = new AbortController()
+    const connectId = `conn-${this.account.id}-${++this.connectSeq}`
+    this.connectAbort = controller
+    this.connectId = connectId
     let storageState: StorageState
     if (config.storageState) {
       this.logger.info('检测到已保存登录状态')
@@ -102,6 +124,19 @@ export class AccountSession {
     this.observePageNavigation()
     try {
       await this.ensureAuthenticated(this.browserSession, config.headless, mode)
+    } catch (error) {
+      // 判别式（计划 §3.1）：以 signal.aborted 为准，而不是读 sessionClosed 布尔——
+      // 后者与 page.on('close') 事件回调链存在时序竞态。
+      // 页面被拆 → 等待中的选择器以 "Target page has been closed" 抛错 → 这里被归因为
+      // 「连接被中止」，不再被上层误当成 attach 失败进而降级回退外部浏览器。
+      if (controller.signal.aborted) {
+        throw new ConnectionAbortedError(
+          connectId,
+          (controller.signal.reason as SessionCloseReason) ?? 'internal',
+          error,
+        )
+      }
+      throw error
     } finally {
       // 登录窗口期结束（成功/异常都算结束）：恢复浏览器语义，防残留 fold 意图劫持用户后续点击。
       // ensureAuthenticated 内可能替换会话（无头登录换实例）；此时该方法不存在 → 无感。
@@ -383,9 +418,24 @@ export class AccountSession {
     this.logger.warn('检测到直播已结束，自动停止所有任务（会话与中控台页面保留，需手动断开）')
   }
 
-  disconnect() {
+  /**
+   * 断开会话（壳 v3 · Wave 1 · P0-1：断开来源进判别式）。
+   *
+   * @param reason 关闭来源：
+   *   - `user`：用户主动断开 / 主动重启连接 → 连接流程归因为 `aborted`（静默，不打扰用户）
+   *   - `page-closed`：会话页面被外部关闭 → 归因为 `page-closed`（要通知用户）
+   *   - `internal`：内部重建会话等 → 归因为 `aborted`
+   *
+   * abort 必须发生在拆卸会话**之前**：连接流程正 await 在被拆的页面上，
+   * 拆掉之后才会以 "Target page has been closed" 抛错，那时 signal.aborted 必须已置位。
+   */
+  disconnect(reason: SessionCloseReason = 'user') {
     this.liveEndedHandled = true
     this.sessionClosed = true
+    // 先中止正在进行的连接：让 connect() 的 catch 走 aborted/page-closed 判别式，
+    // 而不是把"页面被拆"误当成连接失败。
+    this.connectAbort?.abort(reason)
+    this.connectAbort = null
     void commentBackendRegistry.stop(this.account.id).catch(() => {})
     if (isLiveStatusWatcher(this.platform)) {
       this.platform.stopLiveStatusWatch()

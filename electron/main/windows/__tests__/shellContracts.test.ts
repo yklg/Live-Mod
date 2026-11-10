@@ -177,10 +177,13 @@ describe('入口隔离（TC-E1/E2 · A1 多入口物理预防）', () => {
     expect(all).toContain('IPC_CHANNELS.shell.noticeReady')
   })
 
-  it('TC-P7 [warnToast 配对] 连接降级同时具备 fork 契约通道与通知层推送（防只改一半）', () => {
+  it('TC-P7 [单份通知] 连接失败必须推送通知层（壳 v3 · Wave 1：不再有降级回退，故无 warnToast 配对）', () => {
     const conn = readIfExists('electron/main/ipc/connection.ts') ?? ''
-    expect(conn, '必须保留 shell:warnToast（开源 fork 监听契约）').toContain('shell.warnToast')
-    expect(conn, '必须同时推送壳级通知覆盖层').toContain('pushNotice')
+    // 收紧而非删除：失败通知只由主进程推一条到壳级通知覆盖层。
+    // 旧断言要求 connection.ts 同时发 shell.warnToast —— 那对"降级回退"是必需的，
+    // 但降级已整体下线（Wave 1），connection.ts 不再发 warnToast，断言随之改为「不得发」。
+    expect(conn, '连接失败必须推送壳级通知覆盖层').toContain('pushNotice')
+    expect(conn, '已无降级回退：不得再发 shell.warnToast').not.toContain('shell.warnToast')
   })
 
   it('TC-E2 [rail 完整树·反向断言] rail 入口模块图必须含 useGlobalIpcListener（防两边都没注册）', () => {

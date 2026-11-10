@@ -5,6 +5,30 @@ import type { AIProviderSetPayload, AIProviderState } from './aiProvider'
 import { IPC_CHANNELS } from './ipcChannels'
 import type { ShellChromeState, ShellMode } from './shellState'
 
+/**
+ * 连接结果（壳 v3 · Wave 1 · P0-1）。
+ *
+ * 契约升级的原因：旧契约返回 `boolean`，把「用户主动断开（正常结束）」与
+ * 「真失败」抹平成同一个 false，渲染层无法区分，只能弹一条「连接失败」。
+ * 更糟的是主进程在 attach 失败时直接降级回退外部浏览器，于是用户手动断开
+ * 也会看到「已回退外部浏览器登录」。
+ *
+ * 三形态：
+ * - `{ ok: true }`：连接成功。
+ * - `{ ok: false, aborted: true, connectId }`：用户主动断开/重启 → **静默**，不弹任何通知。
+ * - `{ ok: false, aborted?: false, reason, kind }`：真失败 → 由主进程推**一条**通知，
+ *   `kind` 是判别式（attach / page-closed / timeout / other），便于按类型分文案。
+ */
+export type ConnectResult =
+  | { ok: true }
+  | { ok: false; aborted: true; connectId: string }
+  | {
+      ok: false
+      aborted?: false
+      reason: string
+      kind: 'attach' | 'page-closed' | 'timeout' | 'other'
+    }
+
 export interface IpcChannels {
   // LiveControl
   [IPC_CHANNELS.tasks.liveControl.connect]: (params: {
@@ -13,9 +37,9 @@ export interface IpcChannels {
     storageState?: string
     platform: LiveControlPlatform
     account: Account
-    /** 壳模式显式覆盖（A3 裁决链最高优先级）；缺省时由运行时降级/静态矩阵裁决 */
+    /** 壳模式显式覆盖（裁决链最高优先级）；缺省时由壳内默认层/静态矩阵裁决 */
     mode?: 'launch' | 'attach'
-  }) => boolean
+  }) => ConnectResult
   [IPC_CHANNELS.tasks.liveControl.disconnect]: (accountId: string) => boolean
   [IPC_CHANNELS.tasks.liveControl.disconnectedEvent]: (id: string) => void
   [IPC_CHANNELS.tasks.liveControl.liveEndedEvent]: (id: string) => void

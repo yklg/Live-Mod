@@ -41,16 +41,9 @@ export interface BrowserSession {
   createAuxPage?: (opts?: { url?: string }) => Promise<playwright.Page>
 }
 
-/** attach 会话建立失败的可判别错误（ipc 层据此执行 F3 降级回退） */
-export class AttachSessionError extends Error {
-  constructor(
-    readonly reason: 'cdp-endpoint' | 'nonce-timeout' | 'connect-failed',
-    message: string,
-  ) {
-    super(message)
-    this.name = 'AttachSessionError'
-  }
-}
+/** attach 会话建立失败的可判别错误（ipc 层据此分流；壳 v3 · Wave 1 移入 errors/ 目录以便独立测试） */
+import { AttachSessionError } from '#/errors/AttachSessionError'
+export { AttachSessionError }
 
 export interface BrowserConfig {
   headless?: boolean
@@ -108,7 +101,8 @@ class BrowserSessionManager {
    * attach 会话（R1'，browser-shell-formalization-plan v3 Phase 0/1）：
    * ShellWindowManager 建窗（产 nonce）→ CDP endpoint 解析 → connectOverCDP →
    * pageFactory 按 nonce 精确寻址 → 会话组装。任务层拿到的 Page 与 launched 完全同形。
-   * 失败一律归约 AttachSessionError，由 ipc 层执行 F3 降级回退。
+   * 失败一律归约 AttachSessionError（壳 v3 · Wave 1：由 ipc 层按 kind 如实上报失败，
+   * **不再**执行 F3 降级回退——换形态继续跑正是"为什么还会出现回退降级"的根因）。
    */
   public async createAttachedSession(
     accountId: string,

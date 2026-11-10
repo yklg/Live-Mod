@@ -1,5 +1,13 @@
 // F1-F5 失败模式分档状态机（browser-shell-formalization-plan v3 · Phase 0）
 // 纯函数状态机，供会话层消费；契约见 failurePolicy.test.ts（TC-U11~U12c）。
+//
+// 壳 v3 · Wave 1（计划 §3.3）：本文件的 `degrade` 只是**分档状态机内部的一个标记**，
+// 不是 envMatrix/runtimeEnvState 那一支"运行时降级"。算法原样保留，语义如下：
+//   - 历史说明，已无生产写者：降级信号（`RebuildAction='degrade'`）原先会被
+//     envMatrix 消费（attach 失败 → 换外部浏览器）。该消费点已删除（Wave 1）。
+//   - 现在 `degrade` 仅表示"重建预算耗尽"，供本状态机自身幂等短路使用。
+//   - ⚠️ 与评论链路（staleWatcher / RealChromeCommentBackend / contracts）里的
+//     `degraded`（评论数据陈旧）**不是一回事**，禁止一并替换。
 export interface FailurePolicyOptions {
   /** F2：Target closed 连续几次升级重建 */
   targetClosedThreshold: number

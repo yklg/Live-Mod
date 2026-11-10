@@ -1,5 +1,6 @@
 import { Result } from '@praha/byethrow'
 import { ErrorFactory } from '@praha/error-factory'
+import type { SessionCloseReason } from '#/errors/connectionError'
 import { emitter } from '#/event/eventBus'
 import { createLogger } from '#/logger'
 import { AccountSession } from '#/services/AccountSession'
@@ -17,7 +18,9 @@ export class AccountManager {
 
   constructor() {
     emitter.on('page-closed', ({ accountId }) => {
-      this.closeSession(accountId)
+      // 页面被外部关闭 ≠ 用户主动断开（壳 v3 · Wave 1 · P0-1）：
+      // 前者要通知用户「连接失败」，后者必须静默。两类不得混淆。
+      this.closeSession(accountId, 'page-closed')
     })
   }
 
@@ -26,7 +29,8 @@ export class AccountManager {
     const existSession = this.accountSessions.get(account.id)
     if (existSession) {
       this.logger.warn('检测到已存在建立的连接，将关闭已建立的连接')
-      existSession.disconnect()
+      // 内部重建：旧连接的中止归因为 aborted（不打扰用户）
+      existSession.disconnect('internal')
     }
 
     const accountSession = new AccountSession(platformName, account)
@@ -50,12 +54,16 @@ export class AccountManager {
     return this.accountNames.get(accountId) ?? '未定义账号'
   }
 
-  closeSession(accountId: string) {
+  /**
+   * 关闭会话（壳 v3 · Wave 1 · P0-1）。
+   * @param reason 关闭来源，决定在途连接的失败归因：'user'（用户主动）/ 'page-closed'（外部关页）
+   */
+  closeSession(accountId: string, reason: SessionCloseReason = 'user') {
     const accountSession = this.accountSessions.get(accountId)
     // 先摘登记表再清历史：disconnect 是异步的，反过来的话清理期间到达的评论会重新写进 store
     this.accountSessions.delete(accountId)
     commentStore.writer.clear(accountId)
-    accountSession?.disconnect()
+    accountSession?.disconnect(reason)
   }
 
   cleanup() {

@@ -23,8 +23,6 @@ interface ChromeConfig {
   path: string
   storageState: string
   headless: boolean
-  /** 强制外部浏览器逃生口（壳内默认 attach 的唯一逃生口；undefined = false，旧持久化数据无需迁移） */
-  forceExternal: boolean
 }
 
 interface ChromeConfigStore {
@@ -32,14 +30,12 @@ interface ChromeConfigStore {
   setPath: (accountId: string, path: string) => void
   setStorageState: (accountId: string, storageState: string) => void
   setHeadless: (accountId: string, headless: boolean) => void
-  setForceExternal: (accountId: string, forceExternal: boolean) => void
 }
 
 const defaultContext = (): ChromeConfig => ({
   path: '',
   storageState: '',
   headless: false,
-  forceExternal: false,
 })
 
 export const useChromeConfigStore = create<ChromeConfigStore>()(
@@ -77,12 +73,6 @@ export const useChromeConfigStore = create<ChromeConfigStore>()(
           set(state => {
             const context = ensureContext(state, accountId)
             context.headless = headless
-          })
-        },
-        setForceExternal: (accountId, forceExternal) => {
-          set(state => {
-            const context = ensureContext(state, accountId)
-            context.forceExternal = forceExternal
           })
         },
       }
@@ -146,7 +136,6 @@ export function useCurrentChromeConfigActions() {
   const setPath = useChromeConfigStore(state => state.setPath)
   const setStorageState = useChromeConfigStore(state => state.setStorageState)
   const setHeadless = useChromeConfigStore(state => state.setHeadless)
-  const setForceExternal = useChromeConfigStore(state => state.setForceExternal)
   const currentAccountId = useAccounts(state => state.currentAccountId)
 
   return useMemo(
@@ -154,9 +143,7 @@ export function useCurrentChromeConfigActions() {
       setPath: (path: string) => setPath(currentAccountId, path),
       setStorageState: (storageState: string) => setStorageState(currentAccountId, storageState),
       setHeadless: (headless: boolean) => setHeadless(currentAccountId, headless),
-      setForceExternal: (forceExternal: boolean) =>
-        setForceExternal(currentAccountId, forceExternal),
     }),
-    [currentAccountId, setPath, setStorageState, setHeadless, setForceExternal],
+    [currentAccountId, setPath, setStorageState, setHeadless],
   )
 }
