@@ -151,7 +151,7 @@ export default function RedPacket() {
             选择限时领取时长 &rarr; 确定
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-3">
           <div className="space-y-2">
             <Label>限时领取时长</Label>
             <Select value={duration} onValueChange={setDuration}>

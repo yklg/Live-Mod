@@ -327,7 +327,8 @@ function Composer({
             }
           }}
           placeholder="给 AI 发消息，或输入 @ 商品 / 话术…"
-          className="max-h-28 min-h-[22px] w-full resize-none bg-transparent text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+          className="max-h-28 min-h-[22px] w-full resize-none bg-transparent text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+          data-testid="assistant-input"
         />
         <div className="mt-1 flex items-center gap-2">
           <span className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -374,15 +375,17 @@ function AssistantApp() {
   const prompts = useMemo(() => PROMPTS, [])
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden rounded-2xl border border-border bg-background text-foreground shadow-float">
+    <div className="flex h-screen flex-col overflow-hidden rounded-float border-hairline border-border bg-background text-foreground shadow-float">
       <header
-        className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card/80 px-3"
+        className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-card/80 px-3"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         <span className="flex size-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Sparkles className="size-3.5" />
         </span>
-        <span className="text-xs font-semibold">AI 助手</span>
+        <span className="text-[13px] font-semibold" data-testid="assistant-title">
+          AI 助手
+        </span>
         <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[9px] text-success">
           <Check className="size-2.5" /> 已连接
         </span>

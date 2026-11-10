@@ -1,5 +1,6 @@
 // dock 宽度/拖拽导体 E2E：宽度算术、让出宽度、导体显隐、LayoutStore 重启恢复。
 // 运行：先 node node_modules/vite/bin/vite.js build，再 node poc/shell/e2e-panel-resize.mjs
+import fs from 'node:fs'
 import path from 'node:path'
 import { _electron as electron } from 'playwright'
 
@@ -33,8 +34,8 @@ const waitFor = async (fn, timeout, label) => {
 let app = await launch()
 try {
   const debug = () => app.evaluate(({ app: a }) => a.__shellDebug())
-  await waitFor(async () => (await debug()).workspaceMode === 'workbench', 15_000, 'shell ready')
-  await app.evaluate(({ app: a }) => a.__shellWorkspaceOpenPanel('popup'))
+  await waitFor(async () => (await debug()).shellMode === 'entry', 15_000, 'shell ready')
+  await app.evaluate(({ app: a }) => a.__shellModeOpenPanel('popup'))
   await waitFor(async () => (await debug()).panelOpen, 5000, 'dock 打开')
   const base = await debug()
   record(
@@ -42,7 +43,7 @@ try {
     base.dockWidth === 360 && base.railWidth === 416,
     JSON.stringify({ dock: base.dockWidth, rail: base.railWidth }),
   )
-  record('R2 dock 让出 page 808', base.pageBounds?.width === 808, String(base.pageBounds?.width))
+  record('R2 dock 让出 page 864', base.pageBounds?.width === 864, String(base.pageBounds?.width))
 
   await app.evaluate(({ app: a }) => a.__shellPanelDragBegin(360, 1000))
   record('R3 导体显示', (await debug()).panelDragVisible === true, '')
@@ -54,8 +55,8 @@ try {
     JSON.stringify({ dock: wide.dockWidth, rail: wide.railWidth }),
   )
   record(
-    'R5 dock 变宽 page 让出到 748',
-    wide.pageBounds?.width === 748,
+    'R5 dock 变宽 page 让出到 804',
+    wide.pageBounds?.width === 804,
     String(wide.pageBounds?.width),
   )
 
@@ -80,7 +81,16 @@ try {
   await app.close().catch(() => {})
 }
 
-// 重启恢复：同一 userData，dockOpen/routeId/宽度都应恢复
+// 重启恢复：同一 userData + autoRestore 记忆 → live 并恢复 dock
+fs.writeFileSync(
+  path.join(userData, 'shell-entry.json'),
+  JSON.stringify({
+    version: 1,
+    lastPlatform: 'douyin',
+    autoRestore: true,
+    updatedAt: new Date().toISOString(),
+  }),
+)
 app = await launch()
 try {
   const debug = () => app.evaluate(({ app: a }) => a.__shellDebug())
@@ -98,12 +108,12 @@ try {
     JSON.stringify({ open: restored.panelOpen, route: restored.routeId }),
   )
   record('R10 重启恢复 dock 420', restored.dockWidth === 420, String(restored.dockWidth))
-  await app.evaluate(({ app: a }) => a.__shellWorkspaceModeSet('live'))
+  await app.evaluate(({ app: a }) => a.__shellModeSet('live'))
   await sleep(250)
   const live = await debug()
   record(
-    'R11 live 后 rail 476 / page 748',
-    live.railWidth === 476 && live.pageBounds?.width === 748,
+    'R11 live 后 rail 476 / page 804',
+    live.railWidth === 476 && live.pageBounds?.width === 804,
     JSON.stringify({ rail: live.railWidth, page: live.pageBounds }),
   )
 } catch (e) {

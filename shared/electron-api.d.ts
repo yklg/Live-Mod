@@ -1,9 +1,9 @@
 import type { LogMessage } from 'electron-log'
 import type { ProgressInfo, UpdateDownloadedEvent } from 'electron-updater'
-import type { AccountAction, AccountSnapshot, WorkspaceState } from './accounts'
+import type { AccountAction, AccountSnapshot } from './accounts'
 import type { AIProviderSetPayload, AIProviderState } from './aiProvider'
 import { IPC_CHANNELS } from './ipcChannels'
-import type { LiveHistorySnapshot } from './liveHistory'
+import type { ShellChromeState, ShellMode } from './shellState'
 
 export interface IpcChannels {
   // LiveControl
@@ -189,8 +189,6 @@ export interface IpcChannels {
   [IPC_CHANNELS.account.rename]: (accountId: string, name: string) => AccountAction
   [IPC_CHANNELS.account.migrate]: (legacy: unknown) => AccountSnapshot
   [IPC_CHANNELS.account.updated]: (snapshot: AccountSnapshot) => void
-  [IPC_CHANNELS.workspace.history]: () => LiveHistorySnapshot
-  [IPC_CHANNELS.workspace.historyUpdated]: (snapshot: LiveHistorySnapshot) => void
 
   // Log
   [IPC_CHANNELS.log]: (message: LogMessage) => void
@@ -235,18 +233,18 @@ export interface IpcChannels {
   [IPC_CHANNELS.shell.entrySelect]: (params: {
     platform: LiveControlPlatform
     remember: boolean
-  }) => { ok: boolean; reason?: 'unknown' | 'unsupported' | 'shell-disabled' }
+  }) => { ok: boolean; reason?: 'unknown' | 'unsupported' | 'shell-disabled' | 'shell-not-ready' }
   [IPC_CHANNELS.shell.entryIntent]: (intent: {
     platform: LiveControlPlatform
     source: 'manual' | 'restore'
   }) => void
   [IPC_CHANNELS.shell.entrySkip]: () => void
   [IPC_CHANNELS.shell.entryReopen]: () => void
+  [IPC_CHANNELS.shell.entryRememberSet]: (autoRestore: boolean | null) => boolean
   [IPC_CHANNELS.shell.railReady]: () => void
-  [IPC_CHANNELS.shell.workspaceState]: (state: WorkspaceState) => void
-  [IPC_CHANNELS.shell.workspaceModeSet]: (mode: WorkspaceState['mode']) => void
-  [IPC_CHANNELS.shell.workspaceOpenPanel]: (routeId?: string | null) => void
-  [IPC_CHANNELS.shell.workspaceSnapshot]: () => WorkspaceState
+  [IPC_CHANNELS.shell.modeState]: (state: ShellChromeState) => void
+  [IPC_CHANNELS.shell.modeSet]: (mode: ShellMode) => void
+  [IPC_CHANNELS.shell.modeSnapshot]: () => ShellChromeState
   // 壳级通知层（shell-ui-polish v3）：renderer 请求 → 主进程校验/缓冲 → 覆盖层渲染
   [IPC_CHANNELS.shell.notify]: (payload: NoticePayload) => { ok: boolean }
   [IPC_CHANNELS.shell.notice]: (payload: NoticePayload) => void

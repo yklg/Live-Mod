@@ -33,7 +33,7 @@ const AlertDialogContent = ({
     <AlertDialogPrimitive.Content
       data-slot="alert-dialog-content"
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-3 rounded-card border-hairline border-border bg-background p-4 shadow-float duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:max-w-sm',
         className,
       )}
       {...props}
@@ -43,28 +43,12 @@ const AlertDialogContent = ({
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
 
 function AlertDialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        'flex flex-col space-y-2 text-center sm:text-left @max-[900px]/panel:text-left',
-        className,
-      )}
-      {...props}
-    />
-  )
+  return <div className={cn('flex flex-col space-y-1.5 text-left', className)} {...props} />
 }
 AlertDialogHeader.displayName = 'AlertDialogHeader'
 
 function AlertDialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 @max-[900px]/panel:flex-row @max-[900px]/panel:justify-end',
-        className,
-      )}
-      {...props}
-    />
-  )
+  return <div className={cn('flex flex-row justify-end gap-2', className)} {...props} />
 }
 AlertDialogFooter.displayName = 'AlertDialogFooter'
 
@@ -74,7 +58,7 @@ const AlertDialogTitle = ({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Title>) => (
   <AlertDialogPrimitive.Title
     data-slot="alert-dialog-title"
-    className={cn('text-lg font-semibold', className)}
+    className={cn('text-[15px] leading-[22px] font-semibold', className)}
     {...props}
   />
 )
@@ -86,7 +70,7 @@ const AlertDialogDescription = ({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Description>) => (
   <AlertDialogPrimitive.Description
     data-slot="alert-dialog-description"
-    className={cn('text-sm text-muted-foreground', className)}
+    className={cn('text-xs leading-[18px] text-muted-foreground', className)}
     {...props}
   />
 )
@@ -110,11 +94,7 @@ const AlertDialogCancel = ({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) => (
   <AlertDialogPrimitive.Cancel
     data-slot="alert-dialog-cancel"
-    className={cn(
-      buttonVariants({ variant: 'outline' }),
-      'mt-2 sm:mt-0 @max-[900px]/panel:mt-0',
-      className,
-    )}
+    className={cn(buttonVariants({ variant: 'outline' }), className)}
     {...props}
   />
 )

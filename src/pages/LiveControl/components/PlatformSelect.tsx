@@ -29,6 +29,8 @@ const platforms = (() => {
   return productionPlatforms
 })()
 
+export const platformLabel = (platform: LiveControlPlatform) => basePlatforms[platform] ?? platform
+
 const PlatformSelect = React.memo(() => {
   const platform = useCurrentLiveControl(context => context.platform)
   const isConnected = useCurrentLiveControl(context => context.isConnected)

@@ -6,9 +6,8 @@ import { defaultEnvMatrix, resolveConnectMode } from '#/platforms/envMatrix'
 import { runtimeEnvState } from '#/platforms/runtimeEnvState'
 import { typedIpcMainHandle } from '#/utils'
 import windowManager from '#/windowManager'
-import { hideEntry } from '#/windows/entryView'
 import { pushNotice } from '#/windows/noticeBus'
-import { isShellUIEnabled } from '#/windows/shellUI'
+import { isShellUIEnabled, shellModeSet } from '#/windows/shellUI'
 
 const TASK_NAME = '中控台'
 
@@ -18,8 +17,8 @@ function setupIpcHandlers() {
     async (_, { chromePath, headless, storageState, platform, account, mode: payloadMode }) => {
       const logger = createLogger(`@${account.name}`).scope(TASK_NAME)
       try {
-        // 任一连接入口（面板按钮 / 入口意图）开始连接即让位：入口选择器隐藏，露出壳内 Tab
-        hideEntry()
+        // 任一连接入口开始连接即让位：入口选择器隐藏，露出壳内 Tab。
+        if (isShellUIEnabled()) shellModeSet('live')
         if (chromePath) {
           browserManager.setChromePath(chromePath)
         }

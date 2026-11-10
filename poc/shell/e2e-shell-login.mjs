@@ -83,7 +83,7 @@ async function main() {
     // V1 面板内 LiveControl
     await rail.locator('button[title="中控台"]').click()
     await sleep(1200)
-    const connectBtn = rail.locator('text=连接直播控制台').first()
+    const connectBtn = rail.locator('[data-testid="connect-live"]').first()
     record('V1 面板内 LiveControl 页', (await connectBtn.count()) > 0, '连接按钮命中')
 
     // V2 点击连接 → 壳内 Tab 承载登录页（attach 链路）

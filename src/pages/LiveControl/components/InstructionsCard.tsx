@@ -35,12 +35,12 @@ const InstructionsCard = React.memo(() => {
   if (isShellPanelView()) {
     return (
       <Collapsible data-testid="usage-fold">
-        <CollapsibleTrigger className="group/usage flex w-full items-center gap-2.5 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted/50">
-          <span className="text-sm font-medium">使用说明</span>
+        <CollapsibleTrigger className="group/usage flex w-full items-center gap-2.5 rounded-card border-hairline border-border bg-surface-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+          <span className="text-[13px] font-medium">使用说明</span>
           <span className="text-xs text-muted-foreground">3 步上手</span>
           <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-data-[state=open]/usage:rotate-180" />
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2 rounded-lg border bg-card px-4 py-4">
+        <CollapsibleContent className="mt-2 rounded-card border-hairline border-border bg-card px-3 py-3">
           <InstructionSteps />
         </CollapsibleContent>
       </Collapsible>

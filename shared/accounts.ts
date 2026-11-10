@@ -12,19 +12,3 @@ export const DEFAULT_ACCOUNT_SNAPSHOT: AccountSnapshot = {
 export type AccountAction =
   | { ok: true; snapshot: AccountSnapshot }
   | { ok: false; reason: 'invalid' | 'duplicate' | 'last-account' | 'io' }
-
-export type WorkspaceMode = 'workbench' | 'live' | 'browse'
-
-export interface WorkspaceState {
-  mode: WorkspaceMode
-  dockOpen: boolean
-  dockWidth: number
-  connectedAccountIds: string[]
-}
-
-export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
-  mode: 'workbench',
-  dockOpen: false,
-  dockWidth: 360,
-  connectedAccountIds: [],
-}

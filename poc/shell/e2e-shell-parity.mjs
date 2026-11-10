@@ -59,11 +59,31 @@ async function main() {
       return a.__shellDebug()
     })
   const toggle = routeId => app.evaluate(({ app: a }, r) => a.__shellToggle(r), routeId ?? null)
+  const waitFor = async (fn, timeout, label) => {
+    const end = Date.now() + timeout
+    while (Date.now() < end) {
+      try {
+        const v = await fn()
+        if (v) return v
+      } catch {}
+      await new Promise(r => setTimeout(r, 150))
+    }
+    throw new Error(`等待超时：${label}`)
+  }
 
   // ---- TC-G1 panelOpen 单源：推送态与 rail 实际宽度同步 ----
   try {
-    // 第二期：工作台点业务图标 = 进 live + 开 dock；先切 live 再测开合配对
-    await app.evaluate(({ app: a }) => a.__shellWorkspaceModeSet('live'))
+    // 先等 entry 启动裁决完成，避免测试动作被 railReady 的 entry 表面覆盖
+    await waitFor(
+      async () => {
+        const d = await debug()
+        return d.shellMode === 'entry' && d.entryVisible ? d : null
+      },
+      15_000,
+      'entry ready',
+    )
+    // 入口首屏 → live；再测 dock 开合配对
+    await app.evaluate(({ app: a }) => a.__shellModeSet('live'))
     const closed = await debug()
     await toggle('popup')
     const open = await debug()
@@ -80,16 +100,16 @@ async function main() {
     record('TC-G1', false, String(e.message ?? e))
   }
 
-  // ---- TC-G2 z-order：page 恒底，workspace 其次，chrome/rail 恒顶（第二期 entry 退场）----
+  // ---- TC-G2 z-order：page 恒底，entry 其次，chrome/rail 恒顶 ----
   try {
     const { childrenUrls } = await debug()
     const top2 = childrenUrls.slice(-2)
     const isChromeRail = top2.some(u => u.includes('chrome')) && top2.some(u => u.includes('rail'))
-    const isWorkspaceSecond = (childrenUrls[1] ?? '').includes('workspace.html')
-    const bottomIsPage = !['chrome', 'rail', 'workspace'].some(k => childrenUrls[0]?.includes(k))
+    const isEntrySecond = (childrenUrls[1] ?? '').includes('entry.html')
+    const bottomIsPage = !['chrome', 'rail', 'entry'].some(k => childrenUrls[0]?.includes(k))
     record(
       'TC-G2',
-      isChromeRail && isWorkspaceSecond && bottomIsPage && childrenUrls.length >= 4,
+      isChromeRail && isEntrySecond && bottomIsPage && childrenUrls.length >= 4,
       `children(底→顶)=${JSON.stringify(childrenUrls)}`,
     )
   } catch (e) {

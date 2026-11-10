@@ -9,7 +9,11 @@
 export const ENTRY_MEMORY_VERSION = 1
 
 /** 入口选择失败理由（全部为可展示的稳定词表，IPC 原样回传 renderer） */
-export type EntrySelectFailureReason = 'unknown' | 'unsupported' | 'shell-disabled'
+export type EntrySelectFailureReason =
+  | 'unknown'
+  | 'unsupported'
+  | 'shell-disabled'
+  | 'shell-not-ready'
 
 export type EntrySelectionResult =
   | { ok: true; entry: ShellPlatformEntry }

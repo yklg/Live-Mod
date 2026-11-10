@@ -1,7 +1,7 @@
 // dock 开合态唯一真源（第二期）：纯状态 + 注入副作用，零 Electron import。
 // 与第一期差异：computeShellBounds 需要 mode/dockWidth；page bounds 在 dock 模式让出宽度，
 // 在 overlay 模式保持不变。宽度本身的拖拽写入仍由 shellUI 持有并持久化。
-import { computeShellBounds, type ShellBounds, type WorkspaceMode } from './shellLayout'
+import { computeShellBounds, type ShellBounds, type ShellMode } from './shellLayout'
 
 export interface RailState {
   panelOpen: boolean
@@ -11,7 +11,7 @@ export interface RailState {
 export interface PanelControllerDeps {
   winSize: () => { w: number; h: number }
   hasActiveTab: () => boolean
-  mode?: () => WorkspaceMode
+  mode?: () => ShellMode
   dockWidth?: () => number
   applyBounds: (b: ShellBounds) => void
   pushRail: (s: RailState) => void

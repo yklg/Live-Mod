@@ -10,7 +10,6 @@ import {
   DOCK_W,
   dockFits,
   draggedPanelWidth,
-  LEFT_COMPACT_W,
   PAGE_MIN,
   RAIL_W,
   TABSTRIP_H,
@@ -18,8 +17,8 @@ import {
 } from '#/windows/shellLayout'
 
 describe('chromeHeight / dock 常量', () => {
-  it('三模式高度：workbench 52 / live 88 / browse 124', () => {
-    expect(chromeHeight('workbench')).toBe(TOPBAR_H)
+  it('三模式高度：entry 52 / live 88 / browse 124', () => {
+    expect(chromeHeight('entry')).toBe(TOPBAR_H)
     expect(chromeHeight('live')).toBe(TOPBAR_H + BROWSER_BAR_H)
     expect(chromeHeight('browse')).toBe(TOPBAR_H + BROWSER_BAR_H + TABSTRIP_H)
   })
@@ -34,30 +33,32 @@ describe('chromeHeight / dock 常量', () => {
     expect(clampDockWidth(375.6)).toBe(376)
   })
 
-  it('dockFits 用 PAGE_MIN=640：1112/1172 是 360/420 的边界', () => {
-    expect(dockFits(1111, 360)).toBe(false)
-    expect(dockFits(1112, 360)).toBe(true)
-    expect(dockFits(1171, 420)).toBe(false)
-    expect(dockFits(1172, 420)).toBe(true)
+  it('dockFits 无左栏：1056/1116 是 360/420 的边界', () => {
+    expect(dockFits(1055, 360)).toBe(false)
+    expect(dockFits(1056, 360)).toBe(true)
+    expect(dockFits(1115, 420)).toBe(false)
+    expect(dockFits(1116, 420)).toBe(true)
     expect(dockFits(1024, 360)).toBe(false)
   })
 })
 
 describe('computeShellBounds 三模式表', () => {
-  it('workbench 1280：52 顶栏、232 工作区、page=null', () => {
+  it('entry 1280：52 顶栏、entry 1224、page=null、dock 强制收起', () => {
     const r = computeShellBounds({
       winW: 1280,
       winH: 800,
-      mode: 'workbench',
+      mode: 'entry',
+      dockOpen: true,
+      dockWidth: 420,
       activeTabPresent: true,
     })
     expect(r.chrome).toEqual({ x: 0, y: 0, width: 1280, height: 52 })
-    expect(r.workspace).toEqual({ x: 0, y: 52, width: 1280 - RAIL_W, height: 748 })
+    expect(r.entry).toEqual({ x: 0, y: 52, width: 1280 - RAIL_W, height: 748 })
     expect(r.rail).toEqual({ x: 1280 - RAIL_W, y: 52, width: RAIL_W, height: 748 })
     expect(r.page).toBeNull()
   })
 
-  it('live 1280 + dock 360：page 让出 360，rail 416', () => {
+  it('live 1280 + dock 360：page x=0 让出 360，rail 416', () => {
     const r = computeShellBounds({
       winW: 1280,
       winH: 800,
@@ -67,8 +68,8 @@ describe('computeShellBounds 三模式表', () => {
       activeTabPresent: true,
     })
     expect(r.chrome.height).toBe(88)
-    expect(r.workspace.width).toBe(LEFT_COMPACT_W)
-    expect(r.page).toEqual({ x: 56, y: 88, width: 1280 - 56 - 360 - 56, height: 712 })
+    expect(r.entry).toBeNull()
+    expect(r.page).toEqual({ x: 0, y: 88, width: 1280 - 360 - 56, height: 712 })
     expect(r.rail).toEqual({ x: 1280 - 360 - 56, y: 88, width: 360 + 56, height: 712 })
   })
 
@@ -89,32 +90,32 @@ describe('computeShellBounds 三模式表', () => {
       activeTabPresent: true,
     })
     expect(overlay.page).toEqual(closed.page)
-    expect(overlay.page?.width).toBe(1024 - 56 - 56)
+    expect(overlay.page?.width).toBe(1024 - 56)
     expect(overlay.rail).toEqual({ x: 1024 - 360 - 56, y: 88, width: 416, height: 632 })
   })
 
-  it('1112 + 360：恰好 dock；1172 + 420：恰好 dock', () => {
+  it('1056 + 360 / 1116 + 420：恰好 dock，page=PAGE_MIN', () => {
     const a = computeShellBounds({
-      winW: 1112,
+      winW: 1056,
       winH: 800,
       mode: 'live',
       dockOpen: true,
       dockWidth: 360,
       activeTabPresent: true,
     })
-    expect(a.page?.width).toBe(640)
+    expect(a.page?.width).toBe(PAGE_MIN)
     const b = computeShellBounds({
-      winW: 1172,
+      winW: 1116,
       winH: 800,
       mode: 'live',
       dockOpen: true,
       dockWidth: 420,
       activeTabPresent: true,
     })
-    expect(b.page?.width).toBe(640)
+    expect(b.page?.width).toBe(PAGE_MIN)
   })
 
-  it('browse 1280：124 顶栏、标签行有位置、无 dock 时 page 1168', () => {
+  it('browse 1280：124 顶栏、标签行有位置、page 1224', () => {
     const r = computeShellBounds({
       winW: 1280,
       winH: 800,
@@ -123,11 +124,12 @@ describe('computeShellBounds 三模式表', () => {
       activeTabPresent: true,
     })
     expect(r.chrome.height).toBe(124)
-    expect(r.workspace).toEqual({ x: 0, y: 124, width: 56, height: 676 })
-    expect(r.page).toEqual({ x: 56, y: 124, width: 1280 - 56 - 56, height: 676 })
+    expect(r.entry).toBeNull()
+    expect(r.page).toEqual({ x: 0, y: 124, width: 1280 - 56, height: 676 })
+    expect(r.rail.width).toBe(RAIL_W)
   })
 
-  it('无 active Tab：page=null，rail/workspace 照常', () => {
+  it('无 active Tab：page=null，rail 照常', () => {
     const r = computeShellBounds({
       winW: 1280,
       winH: 800,
@@ -151,9 +153,9 @@ describe('computeShellBounds 三模式表', () => {
   })
 })
 
-describe('入口/首页过渡几何', () => {
-  it('entry 随 chrome 高：workbench 52 / live 88', () => {
-    expect(computeEntryBounds({ winW: 1280, winH: 800, mode: 'workbench' })).toEqual({
+describe('入口几何', () => {
+  it('entry 1280：52 顶栏、1224 宽；live 88', () => {
+    expect(computeEntryBounds({ winW: 1280, winH: 800, mode: 'entry' })).toEqual({
       x: 0,
       y: 52,
       width: 1280 - RAIL_W,

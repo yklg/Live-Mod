@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createPanelController } from '#/windows/panelController'
-import type { ShellBounds, WorkspaceMode } from '#/windows/shellLayout'
+import type { ShellBounds, ShellMode } from '#/windows/shellLayout'
 
 function setup(opts?: {
   winW?: number
   winH?: number
   hasActiveTab?: boolean
   dockWidth?: number
-  mode?: WorkspaceMode
+  mode?: ShellMode
 }) {
   const size = { w: opts?.winW ?? 1440, h: opts?.winH ?? 800 }
   const applied: ShellBounds[] = []
@@ -31,7 +31,7 @@ describe('panelController 开合决策表', () => {
     expect(f.ctrl.route()).toBe('popup')
     expect(f.pushed.at(-1)).toEqual({ panelOpen: true, routeId: 'popup' })
     expect(f.applied.at(-1)?.rail.width).toBe(416)
-    expect(f.applied.at(-1)?.page?.width).toBe(1440 - 56 - 360 - 56)
+    expect(f.applied.at(-1)?.page?.width).toBe(1440 - 360 - 56)
   })
 
   it('同 route 再 toggle → close；异 route → 保持打开换页', () => {
@@ -62,7 +62,7 @@ describe('panelController 开合决策表', () => {
     closed.ctrl.close()
     open.ctrl.open('popup')
     expect(open.applied.at(-1)?.page).toEqual(closed.applied.at(-1)?.page)
-    expect(open.applied.at(-1)?.page?.width).toBe(1024 - 56 - 56)
+    expect(open.applied.at(-1)?.page?.width).toBe(1024 - 56)
     expect(open.pushed.at(-1)?.panelOpen).toBe(true)
   })
 
@@ -76,8 +76,8 @@ describe('panelController 开合决策表', () => {
     expect(f.pushed.at(-1)?.panelOpen).toBe(true)
   })
 
-  it('workbench 下 dockOpen 不生效（page=null）', () => {
-    const f = setup({ mode: 'workbench' })
+  it('entry 下 dockOpen 不生效（page=null）', () => {
+    const f = setup({ mode: 'entry' })
     f.ctrl.open('popup')
     expect(f.applied.at(-1)?.page).toBeNull()
     expect(f.applied.at(-1)?.rail.width).toBe(56)

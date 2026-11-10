@@ -1,8 +1,7 @@
 // 光圈式单窗口壳容器（guangquan-shell-ui-parity v3，替换 seamless-fix v3 分栏形态）
 // 拓扑：主窗口 = 纯容器；chromeView（顶栏，chrome.html）+ railView（右栏图标+面板，rail.html）
-//       + entryView（入口平台选择器，entry.html，shell-entry-platform-selector v1）
-//       + 每 Tab 一个 pageView（官方页/任意页，attach 目标）。
-// 层级铁律（P0-2，v1 更新）：contentView 子序 [page(底, index 0), entry(1), chrome(2), rail(3)]；
+//       + entryView（平台选择器，entry.html）+ 每 Tab 一个 pageView（官方页/任意页，attach 目标）。
+// 层级：contentView 子序 [page(底, index 0), entry(1), chrome(2), rail(3)]；
 //       pageView 挂载统一走 tabManager.deps.mount（恒 index 0），entry/chrome/rail 在 attachContainer 一次挂定。
 // 入口视图铁律：入口是本地受信入口视图（带 preload，仅 shell:* 通道），**不是 pageView**；
 //       页面区被入口覆盖时官方页仍在底层，入口隐藏即恢复（不重新加载）。
@@ -22,9 +21,9 @@ import {
   shell,
   WebContentsView,
 } from 'electron'
-import type { WorkspaceState } from 'shared/accounts'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { isKnownShellRouteId } from 'shared/shellRoutes'
+import type { ShellChromeState, ShellMode } from 'shared/shellState'
 import { createLogger } from '#/logger'
 import { accountManager } from '#/managers/AccountManager'
 import { LAYOUT_STORE_VERSION, loadLayoutState, saveLayoutState } from '#/services/LayoutStore'
@@ -40,7 +39,16 @@ import {
   toggleAssistantWindow,
 } from './assistantWindow'
 import { setChromeHeight } from './chromeMetrics'
-import { destroyEntryView, getEntryDebug, hideEntry, relayoutEntryView } from './entryView'
+import { configureEntryStartup, startEntryFallback, stopEntryStartup } from './entryStartup'
+import {
+  attachEntryView,
+  destroyEntryView,
+  getEntryDebug,
+  getEntryWebContents,
+  hideEntry,
+  relayoutEntryView,
+  showEntry,
+} from './entryView'
 import { installExternalProtocolGuard } from './externalProtocolGuard'
 import { foldNavigate } from './foldNavigate'
 import { shouldWarnLeaveControlPage } from './leaveGuard'
@@ -67,18 +75,13 @@ import {
 } from './popupAction'
 import { clearPopupMode, getPopupMode, setPopupMode } from './popupIntent'
 import { classifyPopup } from './popupPolicy'
-import {
-  clampDockWidth,
-  computeEntryBounds,
-  computeShellBounds,
-  DOCK_W,
-  draggedPanelWidth,
-} from './shellLayout'
+import { clampDockWidth, computeShellBounds, DOCK_W, draggedPanelWidth } from './shellLayout'
 import { installShellMenu } from './shellMenu'
+import { createShellMode } from './shellMode'
 import { createShellTabManager, type TabView } from './shellTabManager'
+import { planSurface, type SurfaceOptions } from './surfaceController'
 import { chromeUa } from './ua'
 import { loadAppEntry, makeAppView } from './viewHost'
-import { createWorkspaceMode } from './workspaceMode'
 
 const logger = createLogger('ShellUI')
 
@@ -86,7 +89,7 @@ const logger = createLogger('ShellUI')
 let panelWidth = DOCK_W
 // 一次拖拽的起点：导体只回传 screenX，宽度算术在主进程保持单一真源。
 let panelDragStart: { width: number; screenX: number } | null = null
-const workspaceMode = createWorkspaceMode('workbench')
+const shellMode = createShellMode('entry')
 // assistant 懒创建所需入口参数（首次 Cmd+J/顶栏点击才创建，避免启动期多一个窗口抢焦点/E2E firstWindow）。
 let assistantEntry: { url?: string; file?: string } | null = null
 let assistantPreloadPath: string | null = null
@@ -97,7 +100,6 @@ const FOLD_TIMEOUT_MS = 8000
 let container: BrowserWindow | null = null
 let chromeView: WebContentsView | null = null
 let railView: WebContentsView | null = null
-let workspaceView: WebContentsView | null = null
 
 interface RealTabView extends TabView {
   real: WebContentsView
@@ -107,7 +109,7 @@ let tabManager: ReturnType<typeof createShellTabManager> | null = null
 let panel = createPanelController({
   winSize: () => ({ w: 0, h: 0 }),
   hasActiveTab: () => false,
-  mode: () => workspaceMode.mode(),
+  mode: () => shellMode.mode(),
   dockWidth: () => panelWidth,
   applyBounds: () => {},
   pushRail: () => {},
@@ -237,15 +239,15 @@ function installTabShortcuts(wc: Electron.WebContents) {
   wc.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.meta || input.control) || !tabManager) return
     const key = input.key.toLowerCase()
-    const mode = workspaceMode.mode()
+    const mode = shellMode.mode()
     if (key === 't') {
       event.preventDefault()
       if (input.shift) {
         if (mode === 'browse') tabManager.reopenLast()
         return
       }
-      shellWorkspaceModeSet('browse')
-      tabManager.createTab({})
+      if (mode === 'browse') tabManager.createTab({})
+      else shellModeSet('browse')
       return
     }
     if (key === 'w') {
@@ -286,12 +288,15 @@ export function attachContainer(
 
   chromeView = makeAppView(preloadPath, 'chrome')
   railView = makeAppView(preloadPath, 'rail')
-  workspaceView = makeAppView(preloadPath, 'workspace')
-  // 层级铁律：append [workspace, chrome, rail]，pageView mount 到 index 0 →
-  // [page(0), workspace(1), chrome(2), rail(3)]。entry 平台选择器已退场（第二期）。
-  win.contentView.addChildView(workspaceView)
+  // 层级：entry 先挂（index 0），page mount 时插到 0 → [page, entry, chrome, rail]。
+  attachEntryView(win, entry, preloadPath)
   win.contentView.addChildView(chromeView)
   win.contentView.addChildView(railView)
+  configureEntryStartup({
+    applySurface: applyShellSurface,
+    getMode: () => shellMode.mode(),
+  })
+  startEntryFallback()
   // 壳级通知覆盖层：独立透明子窗口（真点击穿透 + 父子窗口最顶层；视图方案无 setIgnoreMouseEvents——探针结论）
   attachNoticeWindow(win, entry, preloadPath)
   // 面板拖拽导体：透明全窗子窗口，预创建隐藏，仅在拖拽期间显示。
@@ -302,17 +307,20 @@ export function attachContainer(
   const noticeWc = getNoticeWindowWebContents()
   if (noticeWc) windowManager.setTarget('notice', noticeWc)
   // 壳内任意视图聚焦时 Cmd/Ctrl +/-/0 都作用于当前活跃 Tab（地址栏/入口同样可用）
-  for (const wc of [chromeView.webContents, railView.webContents, workspaceView.webContents]) {
+  const entryWc = getEntryWebContents()
+  const shellWcs = entryWc
+    ? [chromeView.webContents, railView.webContents, entryWc]
+    : [chromeView.webContents, railView.webContents]
+  for (const wc of shellWcs) {
     installZoomShortcuts(wc)
     installPanelToggleShortcut(wc)
     installTabShortcuts(wc)
     installAssistantShortcut(wc)
   }
 
-  // 业务推送目标 = railView（完整业务树）；workspace 独立接收账号/模式/场次快照。
+  // 业务推送目标 = railView（完整业务树）；chrome 接收模式快照。
   windowManager.setUITarget(railView.webContents)
   windowManager.setTarget('chrome', chromeView.webContents)
-  windowManager.setTarget('workspace', workspaceView.webContents)
 
   // IPC 来源判定：优先 webContents.id 精确比对（防 URL 伪造/视图重建后 id 变化），兜底走 URL。
   // 与 ipc/index.ts 注册的 URL 版相比，这里多了"精确身份"，但**判据不是安全边界本身** ——
@@ -321,7 +329,7 @@ export function attachContainer(
     const id = event.sender.id
     if (railView && id === railView.webContents.id) return 'rail'
     if (chromeView && id === chromeView.webContents.id) return 'chrome'
-    if (workspaceView && id === workspaceView.webContents.id) return 'workspace'
+    if (entryWc && id === entryWc.id) return 'entry'
     return classifyViewUrl(event.sender.getURL())
   })
 
@@ -412,7 +420,7 @@ export function attachContainer(
           logger.warn('popup-rule=new-tab 壳容器未就绪，降级拒绝：', url.slice(0, 80))
           return { action: 'deny' }
         }
-        if (action.activate) shellWorkspaceModeSet('browse')
+        if (action.activate) shellModeSet('browse')
         const popupTabId = tabManager.createPopupTab({
           url,
           partition: opts.partition,
@@ -477,19 +485,15 @@ export function attachContainer(
       return { w, h }
     },
     hasActiveTab: () => tabManager?.hasActiveTab() ?? false,
-    mode: () => workspaceMode.mode(),
+    mode: () => shellMode.mode(),
     dockWidth: () => panelWidth,
     applyBounds: b => {
       setChromeHeight(b.chrome.height)
       if (chromeView) chromeView.setBounds(b.chrome)
       if (railView) railView.setBounds(b.rail)
-      if (workspaceView) workspaceView.setBounds(b.workspace)
+      relayoutEntryView(b.entry)
       tabManager?.applyPageBounds(b.page)
-      if (container && !container.isDestroyed()) {
-        const [w, h] = container.getContentSize()
-        relayoutEntryView(computeEntryBounds({ winW: w, winH: h, mode: workspaceMode.mode() }))
-      }
-      pushWorkspaceState()
+      pushShellChromeState()
     },
     pushRail: s => {
       windowManager.sendTo('ui', IPC_CHANNELS.shell.railState, s)
@@ -509,7 +513,6 @@ export function attachContainer(
   // 入口加载放在 tabManager 就绪之后：chrome 首帧 invoke(tabsList) 不再撞「壳容器未就绪」
   loadAppEntry(chromeView, entry, 'chrome')
   loadAppEntry(railView, entry, 'rail')
-  if (workspaceView) loadAppEntry(workspaceView, entry, 'workspace')
 
   // 壳模式自定义菜单：缩放快捷键作用于壳内活跃 Tab（默认菜单 Zoom 角色对 WebContentsView 无效）
   installShellMenu({
@@ -522,21 +525,20 @@ export function attachContainer(
   if (process.env.LM_SHELL_DEBUG === '1') registerShellDebug()
 
   win.once('closed', () => {
-    destroyEntryView()
     destroyNoticeWindow()
     destroyPanelDragWindow()
     destroyAssistantWindow()
     resetNoticeBus()
+    stopEntryStartup()
+    destroyEntryView()
     container = null
     chromeView = null
     railView = null
-    workspaceView = null
     tabManager = null
-    windowManager.clearTarget('workspace')
     windowManager.clearUITarget()
   })
 
-  logger.success('壳容器已绑定（第二期：workspace/chrome/rail + Tab 归属）')
+  logger.success('壳容器已绑定（entry/chrome/rail + Tab 归属）')
 }
 
 // ==================== 对外 facade（ipc/shell.ts、shellWindowManager、ipc/app.ts 消费） ====================
@@ -610,58 +612,60 @@ export function shellTabReload(id: number) {
   requireTabs().reload(id)
 }
 
-/** 面板开合唯一入口（A2）：chrome「展开」与 rail 图标/ESC 同走此处；工作台点业务图标 = 进 live + 开 dock。 */
+/** 面板开合唯一入口（A2）：chrome「展开」与 rail 图标/ESC 同走此处。 */
 export function shellRailToggle(routeId?: string | null) {
-  if (workspaceMode.mode() === 'workbench' && routeId) {
-    shellWorkspaceOpenPanel(routeId)
+  if (shellMode.mode() === 'entry') {
+    if (!routeId) return
+    shellOpenPanel(routeId)
     return
   }
   panel.toggle(routeId ?? null)
   persistLayout()
 }
 
-/** workspace 模式快照（workspace/chrome/rail 共用）。 */
-export function shellWorkspaceSnapshot(): WorkspaceState {
-  return {
-    mode: workspaceMode.mode(),
-    dockOpen: panel.isOpen(),
-    dockWidth: panelWidth,
-    connectedAccountIds: [...accountManager.accountSessions.keys()],
-  }
+/** chrome 模式快照（唯一消费者是 ShellChrome）。 */
+export function shellChromeSnapshot(): ShellChromeState {
+  return { mode: shellMode.mode() }
 }
 
-function pushWorkspaceState() {
-  const state = shellWorkspaceSnapshot()
-  windowManager.sendTo('workspace', IPC_CHANNELS.shell.workspaceState, state)
-  windowManager.sendTo('chrome', IPC_CHANNELS.shell.workspaceState, state)
-  windowManager.sendTo('ui', IPC_CHANNELS.shell.workspaceState, state)
+function pushShellChromeState() {
+  windowManager.sendTo('chrome', IPC_CHANNELS.shell.modeState, shellChromeSnapshot())
 }
 
-export function shellWorkspaceModeSet(mode: WorkspaceState['mode']) {
-  if (!workspaceMode.set(mode)) return
-  hideEntry()
-  if (mode === 'live' && tabManager) {
+export function shellModeSet(mode: ShellMode) {
+  applyShellSurface(mode)
+}
+
+/** 所有模式变更的唯一表面入口：entry 显隐/page/dock 一起改，禁止调用方各自显隐。 */
+export function applyShellSurface(mode: ShellMode, opts: SurfaceOptions = {}) {
+  const plan = planSurface(mode, opts)
+  if (!shellMode.set(mode)) return
+  if (plan.entryVisible) showEntry()
+  else hideEntry()
+  if (plan.closeDock) panel.close()
+
+  if (plan.ensureTab === 'account' && tabManager) {
     const tabs = tabManager.state().tabs
     const account = tabs.find(t => t.kind === 'account')
     if (account) tabManager.activateTab(account.id)
     else if (tabs.length === 0) tabManager.createTab({})
   }
-  if (mode === 'browse' && tabManager) {
+  if (plan.ensureTab === 'free' && tabManager) {
     const tabs = tabManager.state().tabs
     const free = tabs.find(t => t.kind !== 'account')
     if (free) tabManager.activateTab(free.id)
     else tabManager.createTab({})
   }
+
+  if (plan.restoreDock) shellRestoreLayout()
+  else if (plan.openDockRoute) panel.open(plan.openDockRoute)
   panel.resize()
-  pushWorkspaceState()
+  pushShellChromeState()
 }
 
-/** 工作台右栏/最近场次：进 live + 开 dock + route 一次完成。 */
-export function shellWorkspaceOpenPanel(routeId?: string | null) {
-  workspaceMode.set('live')
-  hideEntry()
-  panel.open(routeId ?? null)
-  pushWorkspaceState()
+/** 进 live + 打开指定 dock route（rail 图标/展开按钮）。 */
+export function shellOpenPanel(routeId?: string | null) {
+  applyShellSurface('live', { openDockRoute: routeId ?? null })
   persistLayout()
 }
 
@@ -753,7 +757,7 @@ function safeHost(url: string): string {
   }
 }
 
-/** 账号切换：workbench 只切业务上下文；live 下激活/必要时创建该账号 account Tab。 */
+/** 账号切换：entry 只切业务上下文；live 下激活/必要时创建该账号 account Tab。 */
 export function setActiveAccount(accountId: string) {
   if (!tabManager) return
   const id = tabManager.tabIdForAccount(accountId)
@@ -761,7 +765,7 @@ export function setActiveAccount(accountId: string) {
     tabManager.activateTab(id)
     return
   }
-  if (workspaceMode.mode() === 'live') {
+  if (shellMode.mode() === 'live') {
     const created = tabManager.createTab({ accountId })
     tabManager.activateTab(created)
   }
@@ -808,14 +812,14 @@ function registerShellDebug() {
     const bounds = computeShellBounds({
       winW: w,
       winH: h,
-      mode: workspaceMode.mode(),
+      mode: shellMode.mode(),
       dockOpen: panel.isOpen(),
       dockWidth: panelWidth,
       activeTabPresent: tabManager.hasActiveTab(),
     })
-    const entry = getEntryDebug()
     const noticeBus = getNoticeBusState()
     const notice = getNoticeWindowDebug()
+    const entry = getEntryDebug()
     return {
       panelOpen: panel.isOpen(),
       routeId: panel.route(),
@@ -823,14 +827,13 @@ function registerShellDebug() {
       windowWidth: w,
       windowHeight: h,
       pageBounds: bounds.page,
-      zoomPercent: zoomPercent(currentZoomFactor()),
+      entryBounds: bounds.entry,
+      expectedEntryBounds: bounds.entry,
       entryVisible: entry.visible,
       entryUrl: entry.url,
-      entryBounds: entry.bounds,
-      expectedEntryBounds: computeEntryBounds({ winW: w, winH: h, mode: workspaceMode.mode() }),
-      workspaceMode: workspaceMode.mode(),
+      zoomPercent: zoomPercent(currentZoomFactor()),
+      shellMode: shellMode.mode(),
       chromeHeight: bounds.chrome.height,
-      workspaceBounds: bounds.workspace,
       dockWidth: panelWidth,
       connectedAccountIds: [...accountManager.accountSessions.keys()],
       panelWidth,
@@ -867,9 +870,9 @@ function registerShellDebug() {
   }
   const a = app as unknown as Record<string, unknown>
   a.__shellDebug = read
-  a.__shellWorkspaceModeSet = (mode: WorkspaceState['mode']) => shellWorkspaceModeSet(mode)
-  a.__shellWorkspaceOpenPanel = (routeId?: string | null) => shellWorkspaceOpenPanel(routeId)
-  a.__shellWorkspaceSnapshot = () => shellWorkspaceSnapshot()
+  a.__shellModeSet = (mode: ShellMode) => shellModeSet(mode)
+  a.__shellModeOpenPanel = (routeId?: string | null) => shellOpenPanel(routeId)
+  a.__shellEntryDebug = () => getEntryDebug()
   a.__shellToggle = (routeId?: string | null) => panel.toggle(routeId ?? null)
   // Tab 调试契约（仅 LM_SHELL_DEBUG=1）：窗口级 E2E 用，生产不暴露。
   a.__shellTabCreate = (opts?: { url?: string; accountId?: string }) =>
@@ -885,7 +888,7 @@ function registerShellDebug() {
       electronWebContents.getFocusedWebContents() ??
       chromeView?.webContents ??
       railView?.webContents ??
-      workspaceView?.webContents
+      getEntryWebContents()
     if (!wc) return null
     wc.sendInputEvent({
       type: 'keyDown',

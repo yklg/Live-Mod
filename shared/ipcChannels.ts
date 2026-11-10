@@ -85,10 +85,6 @@ export const IPC_CHANNELS = {
     migrate: 'account:migrate',
     updated: 'account:updated',
   },
-  workspace: {
-    history: 'workspace:history',
-    historyUpdated: 'workspace:historyUpdated',
-  },
   log: 'log',
   app: {
     openLogFolder: 'app:openLogFolder',
@@ -139,11 +135,11 @@ export const IPC_CHANNELS = {
     entryIntent: 'shell:entryIntent',
     entrySkip: 'shell:entrySkip',
     entryReopen: 'shell:entryReopen',
+    entryRememberSet: 'shell:entryRememberSet',
     railReady: 'shell:railReady',
-    workspaceState: 'shell:workspaceState',
-    workspaceModeSet: 'shell:workspaceModeSet',
-    workspaceOpenPanel: 'shell:workspaceOpenPanel',
-    workspaceSnapshot: 'shell:workspaceSnapshot',
+    modeState: 'shell:modeState',
+    modeSet: 'shell:modeSet',
+    modeSnapshot: 'shell:modeSnapshot',
     // 壳级通知层（shell-ui-polish v3）：notify=renderer 请求；notice=主进程推送；noticeReady=渲染层就绪
     notify: 'shell:notify',
     notice: 'shell:notice',

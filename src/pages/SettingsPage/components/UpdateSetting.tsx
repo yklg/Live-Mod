@@ -27,7 +27,7 @@ export function UpdateSetting() {
         <CardTitle>软件更新</CardTitle>
         <CardDescription>检查并安装最新版本的应用程序</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-3">
         <div className="space-y-4">
           {/* 手动更新 */}
           <div className="flex items-center justify-between">

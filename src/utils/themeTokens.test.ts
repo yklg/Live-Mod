@@ -58,6 +58,9 @@ const themeOnly = [
   'text-secondary-line',
   'text-micro',
   'text-micro-line',
+  'lm-radius-control',
+  'lm-radius-card',
+  'lm-radius-float',
 ]
 
 describe('theme tokens', () => {
@@ -92,6 +95,10 @@ describe('theme tokens', () => {
       'shadow-elevation-2',
       'shadow-float',
       'radius-xs',
+      'radius-control',
+      'radius-card',
+      'radius-float',
+      'text-sm',
     ]) {
       expect(themeKeys.has(key), `@theme inline missing --${key}`).toBe(true)
     }

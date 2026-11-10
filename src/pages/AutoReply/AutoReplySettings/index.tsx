@@ -19,7 +19,7 @@ import { WechatChannelSetting } from './components/WechatChannelSetting'
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
     <Card>
-      <CardContent className="pt-6">{children}</CardContent>
+      <CardContent className="pt-3">{children}</CardContent>
     </Card>
   )
 }

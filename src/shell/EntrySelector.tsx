@@ -1,7 +1,7 @@
 // 壳入口平台选择器（shell-entry-platform-selector v1）
 // 设计口径：全新选择器（参考对标软件的信息结构，视觉全部用本仓库令牌，见 UI_STYLE_GUIDE.md）。
 // 数据流（单向）：entryCatalog(invoke) → 渲染；卡片点击 → entrySelect(invoke) → 主进程校验/记忆/派发；
-// 「暂不进入」→ entrySkip。本组件不持有连接逻辑，连接由 rail 业务树消费 entryIntent 执行。
+// 「先自由浏览」→ entrySkip。本组件不持有连接逻辑，连接由 rail 业务树消费 entryIntent 执行。
 import { ArrowRight, Loader2, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
@@ -59,7 +59,9 @@ export function EntrySelector() {
         setActionError(
           result?.reason === 'shell-disabled'
             ? '当前不是壳界面模式，无法使用入口选择器'
-            : '该平台暂不支持壳内直连，请稍后重试',
+            : result?.reason === 'shell-not-ready'
+              ? '壳容器尚未就绪，请稍后重试'
+              : '该平台暂不支持壳内直连，请稍后重试',
         )
       } catch (e) {
         setActionError(e instanceof Error ? e.message : '选择平台失败')
@@ -70,6 +72,17 @@ export function EntrySelector() {
     [busyPlatform, remember],
   )
 
+  const handleRememberChange = useCallback((next: boolean) => {
+    setRemember(next)
+    setActionError(null)
+    void window.ipcRenderer
+      .invoke(IPC_CHANNELS.shell.entryRememberSet, next)
+      .then(ok => {
+        if (!ok) setActionError('记住选择保存失败，请稍后重试')
+      })
+      .catch(() => setActionError('记住选择保存失败，请稍后重试'))
+  }, [])
+
   const handleSkip = useCallback(() => {
     void window.ipcRenderer.invoke(IPC_CHANNELS.shell.entrySkip)
   }, [])
@@ -77,13 +90,18 @@ export function EntrySelector() {
   return (
     <div
       data-testid="entry-root"
-      className="flex h-screen w-screen flex-col items-center justify-center overflow-auto bg-background p-10 text-foreground"
+      className="@container/entry flex h-screen w-screen flex-col overflow-auto bg-background px-8 py-10 text-foreground"
     >
-      <div className="w-full max-w-[1000px]">
-        <header className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold tracking-wide">选择要连接的平台</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            选择后将直接在壳内打开对应直播控制台；首次连接需在壳内完成扫码登录
+      <div className="mx-auto w-full max-w-[1000px]">
+        <header className="mb-7">
+          <div className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
+            Live Mod
+          </div>
+          <h1 className="mt-1 text-[26px] leading-[34px] font-semibold tracking-[-0.3px]">
+            选择直播平台
+          </h1>
+          <p className="mt-1 text-xs leading-[18px] text-muted-foreground">
+            连接一个平台开始今天的工作；账号与场次会沿用上次选择。
           </p>
         </header>
 
@@ -98,7 +116,7 @@ export function EntrySelector() {
           <div className="flex flex-col items-center gap-4 py-16">
             <p className="text-sm text-destructive">{error}</p>
             <Button variant="outline" size="sm" onClick={() => void reload()}>
-              <RefreshCw className="mr-2 size-3.5" />
+              <RefreshCw className="size-3.5" />
               重试
             </Button>
           </div>
@@ -106,7 +124,7 @@ export function EntrySelector() {
 
         {!loading && catalog && (
           <>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3 @max-[760px]/entry:grid-cols-1">
               {catalog.platforms.map(platform => {
                 const busy = busyPlatform === platform.id
                 return (
@@ -116,24 +134,25 @@ export function EntrySelector() {
                     data-platform={platform.id}
                     disabled={busyPlatform !== null}
                     onClick={() => void handleSelect(platform.id)}
-                    className="rounded-lg border border-border bg-card p-5 text-left transition-colors duration-150 hover:border-muted-foreground hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
+                    className="rounded-card border-hairline border-border bg-card p-4 text-left shadow-elevation-1 transition-colors duration-150 hover:border-muted-foreground/40 disabled:pointer-events-none disabled:opacity-60"
                   >
-                    <div className="flex items-start gap-3.5">
+                    <div className="flex items-start gap-2.5">
                       <img
                         src={`${PLATFORM_ICON_BASE}/${platform.icon}.png`}
                         alt={platform.label}
-                        className="size-[52px] shrink-0 rounded-[11px] object-contain"
+                        className="size-10 shrink-0 rounded-[10px] object-contain"
                       />
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-base font-semibold">{platform.label}</span>
+                        <div className="truncate text-[14px] leading-5 font-semibold">
+                          {platform.label}
                         </div>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        <p className="mt-0.5 truncate text-xs leading-[18px] text-muted-foreground">
                           {platform.description}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-4 flex items-center justify-end border-t border-border pt-3 text-xs text-muted-foreground">
+                    <div className="mt-3 flex items-center justify-between border-t border-border/70 pt-2.5 text-xs text-muted-foreground">
+                      <span>壳内登录</span>
                       <span className="flex items-center gap-1 font-medium text-foreground">
                         {busy ? <Loader2 className="size-3.5 animate-spin" /> : '进入'}
                         {!busy && <ArrowRight className="size-3.5" />}
@@ -144,17 +163,17 @@ export function EntrySelector() {
               })}
             </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-4 py-3">
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-card border-hairline border-border bg-surface-2 px-3 py-3">
               <div className="min-w-0">
-                <p className="text-[13px] font-medium">启动时自动进入（记住选择）</p>
-                <p className="text-xs text-muted-foreground">
-                  下次启动将跳过此页，直接进入上次选择的平台
+                <p className="text-[12.5px] font-medium">启动时自动进入（记住选择）</p>
+                <p className="text-xs leading-[18px] text-muted-foreground">
+                  下次启动将跳过此页，直接进入上次选择的平台；关闭后下次仍显示本页
                 </p>
               </div>
               <Switch
                 data-testid="entry-remember"
                 checked={remember}
-                onCheckedChange={setRemember}
+                onCheckedChange={handleRememberChange}
                 aria-label="启动时自动进入（记住选择）"
               />
             </div>
@@ -163,7 +182,7 @@ export function EntrySelector() {
               <p className="mt-3 text-center text-xs text-destructive">{actionError}</p>
             )}
 
-            <div className="mt-6 flex flex-col items-center gap-3">
+            <div className="mt-4 flex items-center justify-between gap-3">
               <Button
                 data-testid="entry-skip"
                 variant="ghost"
@@ -172,12 +191,10 @@ export function EntrySelector() {
                 onClick={handleSkip}
                 disabled={busyPlatform !== null}
               >
-                暂不进入
+                先自由浏览
               </Button>
-              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-                选择后随时可在「中控台」面板点击「切换平台」重新选择
-                <br />
-                首次连接需在壳内登录页完成扫码登录，登录态将保存在本机
+              <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+                选择后可随时在「中控台」点击「切换平台」重新选择
               </p>
             </div>
           </>

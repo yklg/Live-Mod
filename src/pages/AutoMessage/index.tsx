@@ -37,11 +37,11 @@ export default function AutoMessage() {
       actions={<TaskButton isTaskRunning={isRunning} onStartStop={handleTaskButtonClick} />}
     >
       <div
-        className="grid gap-5 xl:grid-cols-[2fr_1fr] xl:items-start @2xl/panel:grid-cols-[2fr_1fr] @2xl/panel:items-start"
+        className="grid gap-3 xl:grid-cols-[2fr_1fr] xl:items-start @2xl/panel:grid-cols-[2fr_1fr] @2xl/panel:items-start"
         data-testid="auto-grid"
       >
         <MessageListCard />
-        <div className="grid gap-5">
+        <div className="grid gap-3">
           <MessageSettingsCard />
           <MessageOneKey />
         </div>

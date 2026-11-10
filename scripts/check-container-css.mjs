@@ -21,15 +21,16 @@ if (files.length === 0) {
 const css = files.map(f => readFileSync(path.join(assets, f), 'utf-8')).join('\n')
 const needContainerType = /container-type\s*:\s*inline-size/.test(css)
 const needAtContainer = /@container/.test(css)
-if (!needContainerType || !needAtContainer) {
+const needEntry = /@container entry not \(min-width:760px\)/.test(css)
+if (!needContainerType || !needAtContainer || !needEntry) {
   console.error(
-    `[check-container-css] FAIL：container-type=${needContainerType} @container=${needAtContainer}`,
+    `[check-container-css] FAIL：container-type=${needContainerType} @container=${needAtContainer} entry=${needEntry}`,
   )
   console.error(
-    '  可能原因：rail.html / rail.tsx 的 @container/panel 未被 Tailwind 扫描，或 @xl/panel: 变体未生成。',
+    '  可能原因：rail.html / entry.html 的 @container/panel|entry 未被 Tailwind 扫描，或变体未生成。',
   )
   process.exit(1)
 }
 console.log(
-  `[check-container-css] PASS（${files.length} 个 CSS 文件：container-type:inline-size + @container 均已生成）`,
+  `[check-container-css] PASS（${files.length} 个 CSS 文件：panel/entry 容器规则均已生成）`,
 )

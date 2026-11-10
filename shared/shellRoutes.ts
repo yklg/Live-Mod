@@ -16,20 +16,47 @@ export interface ShellRouteDefinition {
   /** 稳定 id；LayoutStore 持久化 routeId 用这个，不用 path。 */
   id: ShellRouteId
   path: string
+  /** 右栏图标条短标签。 */
   label: string
+  /** 壳面板标题（ShellRail 头唯一 h1 来源）。 */
+  panelTitle: string
   /** 是否出现在右栏图标条。 */
   rail: boolean
 }
 
 export const SHELL_ROUTES: readonly ShellRouteDefinition[] = [
-  { id: 'live', path: '/', label: '中控台', rail: true },
-  { id: 'popup', path: '/auto-popup', label: '自动弹窗', rail: true },
-  { id: 'message', path: '/auto-message', label: '自动发言', rail: true },
-  { id: 'reply', path: '/auto-reply', label: '自动回复', rail: true },
-  { id: 'reply-settings', path: '/auto-reply/settings', label: '自动回复设置', rail: false },
-  { id: 'interaction', path: '/live-interaction', label: '直播互动', rail: true },
-  { id: 'settings', path: '/settings', label: '账号/设置', rail: true },
-  { id: 'red-packet', path: '/red-packet', label: '一键发红包', rail: false },
+  { id: 'live', path: '/', label: '中控台', panelTitle: '直播控制台', rail: true },
+  { id: 'popup', path: '/auto-popup', label: '自动弹窗', panelTitle: '自动弹窗', rail: true },
+  { id: 'message', path: '/auto-message', label: '自动发言', panelTitle: '自动发言', rail: true },
+  { id: 'reply', path: '/auto-reply', label: '自动回复', panelTitle: '自动回复', rail: true },
+  {
+    id: 'reply-settings',
+    path: '/auto-reply/settings',
+    label: '自动回复设置',
+    panelTitle: '自动回复设置',
+    rail: false,
+  },
+  {
+    id: 'interaction',
+    path: '/live-interaction',
+    label: '直播互动',
+    panelTitle: '直播互动',
+    rail: true,
+  },
+  {
+    id: 'settings',
+    path: '/settings',
+    label: '账号/设置',
+    panelTitle: '应用设置',
+    rail: true,
+  },
+  {
+    id: 'red-packet',
+    path: '/red-packet',
+    label: '一键发红包',
+    panelTitle: '一键发红包',
+    rail: false,
+  },
 ]
 
 export const SHELL_RAIL_ROUTES: readonly ShellRouteDefinition[] = SHELL_ROUTES.filter(

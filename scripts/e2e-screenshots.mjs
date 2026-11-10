@@ -56,7 +56,9 @@ try {
       const end = Date.now() + 5000
       while (Date.now() < end) {
         const text = await rail
-          .evaluate(() => document.querySelector('[data-testid="page-title"]')?.textContent?.trim())
+          .evaluate(() =>
+            document.querySelector('[data-testid="panel-title"]')?.textContent?.trim(),
+          )
           .catch(() => null)
         if (text === title) return
         await sleep(100)

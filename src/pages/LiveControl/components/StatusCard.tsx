@@ -2,6 +2,7 @@ import { useMemoizedFn } from 'ahooks'
 import { ArrowLeftRight, ChevronDown, CircleAlert, GlobeIcon, XIcon } from 'lucide-react'
 import React from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { PanelRow, PanelSection, PanelSummary } from '@/components/common/Panel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -15,16 +16,14 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
 import { useConnectToLiveControl, useShellUiStatus } from '@/hooks/useConnectToLiveControl'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { isShellPanelView } from '@/shell/lib/panelMode'
-import PlatformSelect from './PlatformSelect'
+import PlatformSelect, { platformLabel } from './PlatformSelect'
 
 const StatusAlert = React.memo(() => {
   const platform = useCurrentLiveControl(state => state.platform)
@@ -70,29 +69,67 @@ const StatusAlert = React.memo(() => {
   return null
 })
 
+const ConnectionSummary = React.memo(() => {
+  const platform = useCurrentLiveControl(context => context.platform)
+  const accountName = useCurrentLiveControl(context => context.accountName)
+  const isConnected = useCurrentLiveControl(context => context.isConnected)
+  const label = platformLabel(platform)
+  return (
+    <PanelSummary
+      icon={
+        <span className="grid size-8 shrink-0 place-items-center rounded-[9px] bg-primary text-[12px] font-semibold text-primary-foreground">
+          {label.slice(0, 1)}
+        </span>
+      }
+      title={accountName ? `${label} · ${accountName}` : label}
+      subtitle={
+        <span className="inline-flex items-center gap-1">
+          <span
+            className={`size-1.5 rounded-full ${
+              isConnected === 'connected' ? 'bg-success' : 'bg-muted-foreground/30'
+            }`}
+          />
+          {isConnected === 'connected'
+            ? '已连接 · 可开始任务'
+            : isConnected === 'connecting'
+              ? '连接中…'
+              : '未连接'}
+        </span>
+      }
+      action={
+        <div className="flex items-center gap-1">
+          <PlatformSwitchButton />
+          <ConnectToLiveControl compact />
+        </div>
+      }
+    />
+  )
+})
+
 const StatusCard = React.memo(() => {
   return (
-    <Card data-testid="status-card">
-      <CardHeader>
-        <CardTitle>控制台状态</CardTitle>
-        <CardDescription>查看并管理直播控制台的连接状态</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 @3xl/panel:flex-row @3xl/panel:items-center @3xl/panel:justify-between">
-            <ConnectState />
-            <div className="flex flex-wrap items-center gap-2">
-              <PlatformSelect />
-              <PlatformSwitchButton />
-              <ConnectToLiveControl />
-            </div>
+    <div className="flex flex-col gap-2.5" data-testid="status-card">
+      <ConnectionSummary />
+      <StatusAlert />
+      <PanelSection label="连接">
+        <PanelRow>
+          <span className="w-10 shrink-0 text-[11px] text-muted-foreground">平台</span>
+          <PlatformSelect />
+        </PanelRow>
+        <p className="pt-1 text-[11px] text-muted-foreground">壳内登录；视频号请先开播再连接。</p>
+      </PanelSection>
+      <PanelSection label="运行">
+        <div className="divide-y divide-border/70">
+          <div className="py-2">
+            <HeadlessSetting />
           </div>
-          <StatusAlert />
-          <Separator />
-          <AdvancedSettings />
+          <div className="py-2">
+            <ShellModeSetting />
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </PanelSection>
+      <AdvancedSettings />
+    </div>
   )
 })
 
@@ -101,7 +138,7 @@ const AdvancedSettings = React.memo(() => {
   if (isShellPanelView()) {
     return (
       <Collapsible data-testid="advanced-fold">
-        <CollapsibleTrigger className="group/adv flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+        <CollapsibleTrigger className="group/adv flex w-full items-center gap-2.5 rounded-card border-hairline border-border bg-surface-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
           <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
             高级
           </span>
@@ -109,7 +146,7 @@ const AdvancedSettings = React.memo(() => {
           <span className="text-xs text-muted-foreground">无头模式 · 强制外部浏览器</span>
           <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-data-[state=open]/adv:rotate-180" />
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2 space-y-3 rounded-lg border px-3 py-3">
+        <CollapsibleContent className="mt-2 space-y-3 rounded-card border-hairline border-border bg-card px-3 py-3">
           <HeadlessSetting />
           <ShellModeSetting />
         </CollapsibleContent>
@@ -161,7 +198,7 @@ const PlatformSwitchButton = React.memo(() => {
   )
 })
 
-const ConnectToLiveControl = React.memo(() => {
+const ConnectToLiveControl = React.memo(({ compact = false }: { compact?: boolean }) => {
   const { connectLiveControl, disconnectLiveControl } = useConnectToLiveControl()
   const isConnected = useCurrentLiveControl(context => context.isConnected)
 
@@ -174,68 +211,73 @@ const ConnectToLiveControl = React.memo(() => {
   })
 
   return isConnected === 'connected' ? (
-    <DisconnectButton handleButtonClick={handleButtonClick} />
+    <DisconnectButton compact={compact} handleButtonClick={handleButtonClick} />
   ) : (
-    <ConnectButton isLoading={isConnected === 'connecting'} handleButtonClick={handleButtonClick} />
+    <ConnectButton
+      compact={compact}
+      isLoading={isConnected === 'connecting'}
+      handleButtonClick={handleButtonClick}
+    />
   )
 })
 
 const ConnectButton = React.memo(
-  ({ isLoading, handleButtonClick }: { isLoading: boolean; handleButtonClick: () => void }) => {
+  ({
+    isLoading,
+    handleButtonClick,
+    compact = false,
+  }: {
+    isLoading: boolean
+    handleButtonClick: () => void
+    compact?: boolean
+  }) => {
     return (
-      <Button variant={'default'} onClick={handleButtonClick} disabled={isLoading} size="sm">
-        <GlobeIcon className="mr-2 h-4 w-4" />
-        {isLoading ? '连接中...' : '连接直播控制台'}
+      <Button
+        data-testid="connect-live"
+        variant={'default'}
+        onClick={handleButtonClick}
+        disabled={isLoading}
+        size="sm"
+      >
+        <GlobeIcon className="size-3.5" />
+        {isLoading ? '连接中...' : compact ? '连接' : '连接直播控制台'}
       </Button>
     )
   },
 )
 
-const DisconnectButton = React.memo(({ handleButtonClick }: { handleButtonClick: () => void }) => {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="secondary" size="sm">
-          <XIcon className="mr-2 h-4 w-4" />
-          断开
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>确认断开直播控制台？</AlertDialogTitle>
-          <AlertDialogDescription>
-            断开后，自动发言、自动回复、自动弹窗将无法继续驱动当前中控台。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={handleButtonClick}>确认断开</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-})
-
-const ConnectState = React.memo(() => {
-  const isConnected = useCurrentLiveControl(context => context.isConnected)
-  const accountName = useCurrentLiveControl(context => context.accountName)
-  return (
-    <div className="flex items-center gap-2.5">
-      <span
-        className={`h-2.5 w-2.5 rounded-full ${
-          isConnected === 'connected' ? 'bg-success' : 'bg-muted-foreground/30'
-        }`}
-      />
-      <span className="text-sm font-medium">
-        {isConnected === 'connected' ? (
-          `已连接${accountName ? `（${accountName}）` : ''}`
-        ) : (
-          <span className="text-muted-foreground">未连接</span>
-        )}
-      </span>
-    </div>
-  )
-})
+const DisconnectButton = React.memo(
+  ({
+    handleButtonClick,
+    compact = false,
+  }: {
+    handleButtonClick: () => void
+    compact?: boolean
+  }) => {
+    return (
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="secondary" size="sm">
+            {!compact && <XIcon className="size-3.5" />}
+            断开
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认断开直播控制台？</AlertDialogTitle>
+            <AlertDialogDescription>
+              断开后，自动发言、自动回复、自动弹窗将无法继续驱动当前中控台。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleButtonClick}>确认断开</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    )
+  },
+)
 
 const HeadlessSetting = () => {
   const headless = useCurrentChromeConfig(context => context.headless ?? false)

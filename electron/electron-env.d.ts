@@ -13,7 +13,7 @@ declare namespace NodeJS {
      * │ └─┬ preload
      * │   └── index.mjs   > Preload-Scripts
      * ├─┬ dist
-     * │ └── index.html    > Electron-Renderer
+     * │ └── entry.html > Electron-Renderer（壳视图入口）
      * ```
      */
     APP_ROOT: string

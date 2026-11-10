@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
-import { DEFAULT_WORKSPACE_STATE, type WorkspaceState } from 'shared/accounts'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { DEFAULT_SHELL_CHROME_STATE, type ShellChromeState } from 'shared/shellState'
 import { create } from 'zustand'
 
-interface WorkspaceStore extends WorkspaceState {
+interface ShellModeStore extends ShellChromeState {
   hydrated: boolean
 }
 
-const store = create<WorkspaceStore>(() => ({ ...DEFAULT_WORKSPACE_STATE, hydrated: false }))
+const store = create<ShellModeStore>(() => ({ ...DEFAULT_SHELL_CHROME_STATE, hydrated: false }))
 let hydration: Promise<void> | null = null
 let listened = false
 
@@ -16,11 +16,11 @@ function ensureHydrated() {
   hydration = (async () => {
     if (!listened) {
       listened = true
-      window.ipcRenderer.on(IPC_CHANNELS.shell.workspaceState, (state: WorkspaceState) => {
+      window.ipcRenderer.on(IPC_CHANNELS.shell.modeState, (state: ShellChromeState) => {
         store.setState({ ...state, hydrated: true })
       })
     }
-    const state = await window.ipcRenderer.invoke(IPC_CHANNELS.shell.workspaceSnapshot)
+    const state = await window.ipcRenderer.invoke(IPC_CHANNELS.shell.modeSnapshot)
     store.setState({ ...state, hydrated: true })
   })().catch(() => {
     store.setState({ hydrated: false })
@@ -28,7 +28,7 @@ function ensureHydrated() {
   return hydration
 }
 
-export function useWorkspaceState<T>(selector: (state: WorkspaceStore) => T): T {
+export function useShellMode<T>(selector: (state: ShellModeStore) => T): T {
   useEffect(() => {
     void ensureHydrated()
   }, [])

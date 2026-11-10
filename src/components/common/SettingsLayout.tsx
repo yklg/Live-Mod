@@ -37,7 +37,7 @@ export function SettingsLayout({
     <div
       data-testid="settings-layout"
       className={cn(
-        'grid grid-cols-[172px_1fr] items-start gap-6 @max-[900px]/panel:grid-cols-[148px_1fr] @max-[900px]/panel:gap-4',
+        'grid grid-cols-[148px_1fr] items-start gap-4',
         '@max-[560px]/panel:grid-cols-1 @max-[560px]/panel:gap-3',
         className,
       )}
@@ -51,13 +51,13 @@ export function SettingsLayout({
             key={section.id}
             href={`#${section.id}`}
             onClick={handleNavClick(section.id)}
-            className="rounded-lg border-l-2 border-transparent px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded-control border-l-2 border-transparent px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             {section.label}
           </a>
         ))}
       </nav>
-      <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-3">
         {sections.map(section => (
           <section key={section.id} id={section.id} className="scroll-mt-4">
             {section.content}

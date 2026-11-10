@@ -1,5 +1,5 @@
 // 壳顶栏（第二期）：52px 产品顶栏 + 36px 浏览器工具条 + 36px 标签行（仅自由浏览）。
-// 数据流：主进程 tabManager → shell:tabsState；workspaceMode → shell:workspaceState。
+// 数据流：主进程 tabManager → shell:tabsState；shellMode → shell:modeState。
 // chromeView 是最小树：只监听 shell:* 通道，零业务事件。
 import {
   BookOpen,
@@ -24,7 +24,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
-import { useWorkspaceState } from '@/hooks/useWorkspace'
+import { useShellMode } from '@/hooks/useShellMode'
 
 const GITHUB_URL = 'https://github.com/yklg/Live-Mod'
 const isMac = /Macintosh|Mac OS X/.test(navigator.userAgent)
@@ -40,7 +40,7 @@ export default function ShellChrome() {
   const tabsRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: number; startX: number; started: boolean } | null>(null)
   const suppressClickRef = useRef(false)
-  const mode = useWorkspaceState(s => s.mode)
+  const mode = useShellMode(s => s.mode)
 
   useEffect(() => {
     void (async () => {
@@ -77,7 +77,7 @@ export default function ShellChrome() {
 
   const visibleTabs = useMemo(() => state.tabs.filter(t => t.kind !== 'account'), [state.tabs])
   const isBrowse = mode === 'browse'
-  const isWorkbench = mode === 'workbench'
+  const isEntry = mode === 'entry'
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -153,9 +153,9 @@ export default function ShellChrome() {
         <span className="text-xs font-semibold">Live Mod</span>
         <span className="mx-1 text-border">/</span>
         <span className="text-xs text-muted-foreground">
-          {isWorkbench ? '工作台' : isBrowse ? '自由浏览' : '直播中控'}
+          {isEntry ? '选择平台' : isBrowse ? '自由浏览' : '直播中控'}
         </span>
-        {!isWorkbench && active?.title && (
+        {!isEntry && active?.title && (
           <span className="truncate text-xs text-muted-foreground/70">· {active.title}</span>
         )}
         <span className="flex-1" />
@@ -181,7 +181,7 @@ export default function ShellChrome() {
             className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             title="项目主页"
             onClick={() => {
-              call('workspaceModeSet', 'browse')
+              call('modeSet', 'browse')
               call('tabCreate', { url: GITHUB_URL })
             }}
           >
@@ -235,8 +235,8 @@ export default function ShellChrome() {
         </div>
       </div>
 
-      {/* 浏览器工具条 36px（非工作台） */}
-      {!isWorkbench && (
+      {/* 浏览器工具条 36px（entry 不渲染） */}
+      {!isEntry && (
         <div className="flex h-9 shrink-0 items-center gap-1 border-y border-border bg-background/60 px-2">
           <button
             type="button"
@@ -292,7 +292,7 @@ export default function ShellChrome() {
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted'
             }`}
-            onClick={() => call('workspaceModeSet', isBrowse ? 'live' : 'browse')}
+            onClick={() => call('modeSet', isBrowse ? 'live' : 'browse')}
           >
             {isBrowse ? '收起标签' : '自由浏览'}
           </button>

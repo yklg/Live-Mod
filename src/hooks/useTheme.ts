@@ -3,8 +3,8 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
-// ⚠️ 与 index.html 的内联预置脚本共享 'appearance-storage' 的存储格式
-// （{state:{mode},version:1}）。修改此处持久化结构时必须同步修改 index.html 的解析逻辑。
+// ⚠️ 与各 Shell HTML（chrome/rail/entry 等）的内联预置脚本共享 'appearance-storage' 的存储格式
+// （{state:{mode},version:1}）。修改此处持久化结构时必须同步修改各入口 HTML 的解析逻辑。
 interface ThemeState {
   mode: ThemeMode
   setMode: (mode: ThemeMode) => void
@@ -48,7 +48,7 @@ export function useTheme() {
 
 /**
  * 渲染前调用：按持久化的 mode 应用主题类，并监听系统外观变化（仅 system 模式响应）。
- * index.html 的内联脚本已提前预置过 .dark 类，此处保证 store 与 DOM 一致。
+ * 各 Shell HTML 的内联脚本已提前预置过 .dark 类，此处保证 store 与 DOM 一致。
  */
 export function initTheme() {
   applyTheme(useThemeStore.getState().mode)

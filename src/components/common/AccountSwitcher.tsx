@@ -181,5 +181,3 @@ export const AccountSwitcher = React.memo(() => {
     </div>
   )
 })
-
-AccountSwitcher.whyDidYouRender = true

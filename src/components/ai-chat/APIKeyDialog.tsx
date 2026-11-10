@@ -346,7 +346,7 @@ export function APIKeyDialog({ type = 'chat' }: APIKeyDialogProps) {
 
   const dialogContent = useMemo(
     () => (
-      <DialogContent className="sm:max-w-[425px] @max-[900px]/panel:max-w-[425px]">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>API Key 配置</DialogTitle>
           <DialogDescription className="py-1">选择并配置您想要使用的 AI 提供商。</DialogDescription>

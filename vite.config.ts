@@ -22,16 +22,14 @@ export default defineConfig(({ command }) => {
         shared: path.join(__dirname, 'shared'),
       },
     },
-    // 光圈式壳四入口（guangquan-shell-ui-parity v3 · A1 + shell-entry-platform-selector v1）：
-    // index=经典应用，chrome=顶栏最小树，rail=右栏完整业务树，entry=入口平台选择器最小树。
+    // 壳入口（guangquan-shell-ui-parity v3 · A1 + shell-entry-platform-selector v1）：
+    // chrome=顶栏最小树，rail=右栏完整业务树，entry=入口平台选择器最小树。
     // chrome/entry 入口模块图物理不含业务监听（TC-E1/TC-E3 防线）。
     build: {
       rollupOptions: {
         input: {
-          main: path.join(__dirname, 'index.html'),
           chrome: path.join(__dirname, 'chrome.html'),
           rail: path.join(__dirname, 'rail.html'),
-          workspace: path.join(__dirname, 'workspace.html'),
           entry: path.join(__dirname, 'entry.html'),
           notice: path.join(__dirname, 'notice.html'),
           drag: path.join(__dirname, 'drag.html'),

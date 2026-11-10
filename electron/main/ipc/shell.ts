@@ -3,7 +3,8 @@
 import { BrowserWindow, session } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { typedIpcMainHandle } from '#/utils'
-import { getEntryCatalogSnapshot, hideEntry, selectEntry } from '#/windows/entryView'
+import { getEntryCatalogSnapshot, selectEntry, setEntryRemember } from '#/windows/entrySelection'
+import { handleEntryReady } from '#/windows/entryStartup'
 import { handleNoticeReady, pushNotice } from '#/windows/noticeBus'
 import { accountTabPartition } from '#/windows/shellTabManager'
 import {
@@ -12,11 +13,12 @@ import {
   shellAssistantClose,
   shellAssistantReady,
   shellAssistantToggle,
+  shellChromeSnapshot,
+  shellModeSet,
   shellPanelDragBegin,
   shellPanelResize,
   shellPanelResizeEnd,
   shellRailToggle,
-  shellRestoreLayout,
   shellTabActivate,
   shellTabBack,
   shellTabClose,
@@ -28,11 +30,7 @@ import {
   shellTabReload,
   shellTabReopen,
   shellTabsList,
-  shellWorkspaceModeSet,
-  shellWorkspaceOpenPanel,
-  shellWorkspaceSnapshot,
 } from '#/windows/shellUI'
-import { handleWorkspaceReady } from '#/windows/workspaceStartup'
 
 function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.tabCreate, (_, params) => shellTabCreate(params))
@@ -59,11 +57,8 @@ function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.assistantReady, event => shellAssistantReady(event.sender))
   typedIpcMainHandle(IPC_CHANNELS.shell.tabsList, () => shellTabsList())
   typedIpcMainHandle(IPC_CHANNELS.shell.railToggle, (_, routeId) => shellRailToggle(routeId))
-  typedIpcMainHandle(IPC_CHANNELS.shell.workspaceModeSet, (_, mode) => shellWorkspaceModeSet(mode))
-  typedIpcMainHandle(IPC_CHANNELS.shell.workspaceOpenPanel, (_, routeId) =>
-    shellWorkspaceOpenPanel(routeId),
-  )
-  typedIpcMainHandle(IPC_CHANNELS.shell.workspaceSnapshot, () => shellWorkspaceSnapshot())
+  typedIpcMainHandle(IPC_CHANNELS.shell.modeSet, (_, mode) => shellModeSet(mode))
+  typedIpcMainHandle(IPC_CHANNELS.shell.modeSnapshot, () => shellChromeSnapshot())
   typedIpcMainHandle(IPC_CHANNELS.shell.uiStatus, () => isShellUIEnabled())
 
   // ---- 壳入口平台选择器（shell-entry-platform-selector v1）----
@@ -71,22 +66,22 @@ function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.entryCatalog, () => getEntryCatalogSnapshot())
   typedIpcMainHandle(IPC_CHANNELS.shell.entrySelect, (_, params) => {
     const result = selectEntry(params.platform, params.remember, isShellUIEnabled())
-    if (result.ok) shellWorkspaceModeSet('live')
+    if (result.ok) shellModeSet('live')
     return result
   })
   typedIpcMainHandle(IPC_CHANNELS.shell.entrySkip, () => {
-    hideEntry()
-    shellWorkspaceModeSet('workbench')
+    shellModeSet('browse')
   })
   typedIpcMainHandle(IPC_CHANNELS.shell.entryReopen, () => {
     if (!isShellUIEnabled()) return
-    hideEntry()
-    shellWorkspaceModeSet('workbench')
+    shellModeSet('entry')
   })
+  typedIpcMainHandle(IPC_CHANNELS.shell.entryRememberSet, (_, autoRestore) =>
+    setEntryRemember(autoRestore),
+  )
   typedIpcMainHandle(IPC_CHANNELS.shell.railReady, () => {
     if (!isShellUIEnabled()) return
-    handleWorkspaceReady()
-    shellRestoreLayout()
+    handleEntryReady()
   })
 
   // ---- 壳级通知层（shell-ui-polish v3）----

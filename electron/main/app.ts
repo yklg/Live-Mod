@@ -2,7 +2,7 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, nativeTheme, shell } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { emitter } from './event/eventBus'
 import { updateManager } from './managers/UpdateManager'
@@ -23,7 +23,7 @@ import { accountManager } from './managers/AccountManager'
 // │ └─┬ preload
 // │   └── index.mjs   > Preload-Scripts
 // ├─┬ dist
-// │ └── index.html    > Electron-Renderer
+// │ └── entry.html > Electron-Renderer（壳视图入口，经典树已移除）
 //
 
 function createBoxedString(lines: string[]) {
@@ -87,7 +87,7 @@ if (!app.requestSingleInstanceLock()) {
 
 let win: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
-const indexHtml = path.join(RENDERER_DIST, 'index.html')
+const entryHtml = path.join(RENDERER_DIST, 'entry.html')
 
 async function createWindow() {
   // 光圈式壳形态（guangquan-shell-ui-parity v3）：壳 UI 是唯一运行形态（经典模式已移除），
@@ -138,7 +138,7 @@ async function createWindow() {
     const { attachContainer } = await import('./windows/shellUI')
     attachContainer(
       win,
-      VITE_DEV_SERVER_URL ? { url: VITE_DEV_SERVER_URL } : { file: indexHtml },
+      VITE_DEV_SERVER_URL ? { url: VITE_DEV_SERVER_URL } : { file: entryHtml },
       preload,
     )
     win.show()
@@ -249,21 +249,4 @@ process.on('unhandledRejection', reason => {
   logger.error('--------------未被处理的错误---------------')
   logger.error(reason)
   logger.error('-------------------------------------------')
-})
-
-// New window example arg: new windows url
-ipcMain.handle('open-win', (_, arg) => {
-  const childWindow = new BrowserWindow({
-    webPreferences: {
-      preload,
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  })
-
-  if (VITE_DEV_SERVER_URL) {
-    childWindow.loadURL(`${VITE_DEV_SERVER_URL}#${arg}`)
-  } else {
-    childWindow.loadFile(indexHtml, { hash: arg })
-  }
 })

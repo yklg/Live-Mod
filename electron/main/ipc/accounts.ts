@@ -8,7 +8,6 @@ import windowManager from '#/windowManager'
 function broadcast() {
   const snapshot = accountStore.snapshot()
   windowManager.sendTo('ui', IPC_CHANNELS.account.updated, snapshot)
-  windowManager.sendTo('workspace', IPC_CHANNELS.account.updated, snapshot)
   return snapshot
 }
 

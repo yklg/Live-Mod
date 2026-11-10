@@ -84,8 +84,8 @@ async function main() {
         15_000,
       )
 
-    // 第二期：页面在 browse/live 才可见；最小化保活测试先进入 browse
-    await chromePage.evaluate(() => window.ipcRenderer.invoke('shell:workspaceModeSet', 'browse'))
+    // 页面在 browse/live 才可见；最小化保活测试先进入 browse
+    await chromePage.evaluate(() => window.ipcRenderer.invoke('shell:modeSet', 'browse'))
     await sleep(300)
     // A = 被测页；B = 后建并 active → A 进入非激活
     await createTab(`${base}/a.html`)
@@ -136,8 +136,12 @@ async function main() {
     const m1 = await pageA.evaluate(() => window.__ticks)
     let minimizedClickOk = false
     try {
-      await pageA.locator('#btn').click({ timeout: 4000 })
-      minimizedClickOk = true
+      // 最小化后不做 OS 级 pointer（Playwright actionable 会受窗口状态影响）：
+      // 直接在页面内触发真实 DOM click，验证渲染进程仍可执行交互。
+      const beforeClicks = await pageA.evaluate(() => window.__clicks)
+      await pageA.evaluate(() => document.querySelector('#btn')?.click())
+      const afterClicks = await pageA.evaluate(() => window.__clicks)
+      minimizedClickOk = afterClicks > beforeClicks
     } catch {
       minimizedClickOk = false
     }

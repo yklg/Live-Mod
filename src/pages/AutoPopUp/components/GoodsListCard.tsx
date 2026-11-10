@@ -125,14 +125,14 @@ const CommonList = () => {
 const GoodsListCard = React.memo(() => {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="pt-3">
         <Tabs defaultValue="goods-list" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="goods-list">商品列表</TabsTrigger>
             <TabsTrigger value="shortcuts">快捷键配置</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="goods-list" className="space-y-6 mt-4">
+          <TabsContent value="goods-list" className="space-y-3 mt-4">
             <CommonList />
           </TabsContent>
 

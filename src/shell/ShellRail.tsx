@@ -15,13 +15,13 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router'
 import type { ShellRailState } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { SHELL_RAIL_ROUTES, SHELL_ROUTES, type ShellRouteId } from 'shared/shellRoutes'
-import { useGlobalIpcListener } from '@/App'
 import { Toaster } from '@/components/ui/toaster'
 import { UpdateDialog } from '@/components/update/UpdateDialog'
+import { useGlobalIpcListener } from '@/hooks/useGlobalIpcListener'
 import AutoMessage from '@/pages/AutoMessage'
 import AutoPopUp from '@/pages/AutoPopUp'
 import AutoReply from '@/pages/AutoReply'
@@ -59,6 +59,7 @@ interface RailItem {
   id: string
   icon: React.ComponentType<{ className?: string }>
   label: string
+  panelTitle?: string
   path?: string
   external?: boolean
 }
@@ -68,9 +69,10 @@ const ITEMS: RailItem[] = [
     id: route.id,
     icon: ROUTE_ICONS[route.id],
     label: route.label,
+    panelTitle: route.panelTitle,
     path: route.path,
   })),
-  { id: 'help', icon: HelpCircle, label: '帮助', external: true },
+  { id: 'help', icon: HelpCircle, label: '帮助', panelTitle: '帮助', external: true },
 ]
 
 const RAIL_W = 56
@@ -131,6 +133,7 @@ export function ShellRailRoot() {
 
 function ShellRailLayout({ rail }: { rail: ShellRailState }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [lastRoute, setLastRoute] = useState<string | null>(null)
 
   // 跟随推送换页：routeId 变化才 navigate（面板内容由路由决定，开合由主进程决定）
@@ -143,13 +146,20 @@ function ShellRailLayout({ rail }: { rail: ShellRailState }) {
   }, [rail, lastRoute, navigate])
 
   const activeItem = ITEMS.find(i => i.id === rail.routeId)
+  const activeRoute =
+    SHELL_ROUTES.find(r => r.path === location.pathname) ??
+    SHELL_ROUTES.find(r => r.id === rail.routeId)
+  const panelTitle =
+    activeRoute?.panelTitle ?? activeItem?.panelTitle ?? activeItem?.label ?? '功能面板'
 
   return (
     <>
       {rail.panelOpen && (
         <div className="flex min-w-0 flex-1 flex-col border-l border-border">
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4">
-            <span className="flex-1 text-sm font-medium">{activeItem?.label ?? '功能面板'}</span>
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+            <h1 data-testid="panel-title" className="flex-1 truncate text-[13px] font-semibold">
+              {panelTitle}
+            </h1>
             {/* 面板是 600px overlay，会盖住官方页面右侧（抖店中控台的评论区/观众列表就在那里）。
                 这里明确给出「一键让出右侧」的入口，否则用户会以为官方页面没有评论。 */}
             <span
@@ -161,11 +171,11 @@ function ShellRailLayout({ rail }: { rail: ShellRailState }) {
             </span>
             <button
               type="button"
-              className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+              className="rounded-control p-1.5 text-muted-foreground hover:bg-muted"
               onClick={() => requestToggle(null)}
               aria-label="收起面板"
             >
-              <X className="size-4" />
+              <X className="size-3.5" />
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -177,7 +187,7 @@ function ShellRailLayout({ rail }: { rail: ShellRailState }) {
           </div>
         </div>
       )}
-      <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-l border-border bg-muted/40 py-2">
+      <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-l border-border bg-surface-2 py-2">
         {ITEMS.map(item => {
           const Icon = item.icon
           const isActive = rail.panelOpen && rail.routeId === item.id
@@ -193,13 +203,14 @@ function ShellRailLayout({ rail }: { rail: ShellRailState }) {
                 }
                 requestToggle(item.id)
               }}
-              className={`flex size-9 items-center justify-center rounded-lg transition-colors ${
+              className={`flex h-[38px] w-10 flex-col items-center justify-center gap-0.5 rounded-[9px] transition-colors ${
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
               <Icon className="size-4" />
+              <span className="max-w-full truncate text-[8px] leading-none">{item.label}</span>
             </button>
           )
         })}

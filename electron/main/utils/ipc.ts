@@ -14,7 +14,6 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 export type ShellViewKind =
   | 'rail'
   | 'chrome'
-  | 'workspace'
   | 'entry'
   | 'notice'
   | 'drag'
@@ -23,20 +22,24 @@ export type ShellViewKind =
 
 /**
  * 信任级别：
- * - `business-ui`：承载业务 UI 的本地视图（壳 rail 完整业务树）。评论面板只在 rail 渲染。
- * - chrome / entry / notice 只做壳级 UI，不需要业务通道 ⇒ 拒绝（缩小暴露面）。
+ * - `business-ui`：承载业务 UI 的本地视图（壳 rail 完整业务树）。
+ * - `shell-ui`：chrome/rail/assistant 等壳级 UI。
+ * - `entry-ui`：仅入口平台选择器（catalog/select/skip/remember）。
+ * - `entry-reopen`：入口重开入口（rail 的“切换平台”与 entry 自身）。
  */
-export type TrustLevel = 'business-ui' | 'ai-ui' | 'shell-ui'
+export type TrustLevel = 'business-ui' | 'ai-ui' | 'shell-ui' | 'entry-ui' | 'entry-reopen'
 
 const BUSINESS_UI_KINDS: readonly ShellViewKind[] = ['rail']
 const AI_UI_KINDS: readonly ShellViewKind[] = ['rail', 'assistant']
-const SHELL_UI_KINDS: readonly ShellViewKind[] = ['chrome', 'rail', 'workspace', 'assistant']
+const SHELL_UI_KINDS: readonly ShellViewKind[] = ['chrome', 'rail', 'assistant']
+const ENTRY_UI_KINDS: readonly ShellViewKind[] = ['entry']
+const ENTRY_REOPEN_KINDS: readonly ShellViewKind[] = ['entry', 'rail']
 
 export const CHANNEL_TRUST: Partial<Record<keyof IpcChannels, TrustLevel>> = {
   [IPC_CHANNELS.tasks.commentBackend.getState]: 'business-ui',
   [IPC_CHANNELS.tasks.commentBackend.send]: 'business-ui',
   [IPC_CHANNELS.tasks.commentBackend.debugInject]: 'business-ui',
-  // AI 配置/对话：rail（AutoReply）与 assistant（浮窗）都能用，chrome/entry/notice 不能。
+  // AI 配置/对话：rail（AutoReply）与 assistant（浮窗）都能用，chrome/notice 不能。
   [IPC_CHANNELS.tasks.aiChat.chat]: 'ai-ui',
   [IPC_CHANNELS.tasks.aiChat.abort]: 'ai-ui',
   [IPC_CHANNELS.tasks.aiChat.normalChat]: 'ai-ui',
@@ -48,31 +51,27 @@ export const CHANNEL_TRUST: Partial<Record<keyof IpcChannels, TrustLevel>> = {
   [IPC_CHANNELS.shell.assistantToggle]: 'shell-ui',
   [IPC_CHANNELS.shell.assistantClose]: 'shell-ui',
   [IPC_CHANNELS.shell.assistantReady]: 'shell-ui',
-  // 第二期：账号单一源与 workspace 数据只允许本地壳视图。
+  // 账号单一源与壳模式只允许本地壳视图。
   [IPC_CHANNELS.account.get]: 'shell-ui',
   [IPC_CHANNELS.account.add]: 'shell-ui',
   [IPC_CHANNELS.account.remove]: 'shell-ui',
   [IPC_CHANNELS.account.rename]: 'shell-ui',
   [IPC_CHANNELS.account.migrate]: 'shell-ui',
   [IPC_CHANNELS.account.switch]: 'shell-ui',
-  [IPC_CHANNELS.workspace.history]: 'shell-ui',
-  [IPC_CHANNELS.shell.workspaceModeSet]: 'shell-ui',
-  [IPC_CHANNELS.shell.workspaceOpenPanel]: 'shell-ui',
-  [IPC_CHANNELS.shell.workspaceSnapshot]: 'shell-ui',
+  [IPC_CHANNELS.shell.modeSet]: 'shell-ui',
+  [IPC_CHANNELS.shell.modeSnapshot]: 'shell-ui',
+  // 入口选择器：只允许 entry 视图；reopen 允许 entry/rail（rail 的“切换平台”）。
+  [IPC_CHANNELS.shell.entryCatalog]: 'entry-ui',
+  [IPC_CHANNELS.shell.entrySelect]: 'entry-ui',
+  [IPC_CHANNELS.shell.entrySkip]: 'entry-ui',
+  [IPC_CHANNELS.shell.entryRememberSet]: 'entry-ui',
+  [IPC_CHANNELS.shell.entryReopen]: 'entry-reopen',
 }
 
 /** URL → 视图身份。dev（http://host/rail.html）与 prod（file:///.../dist/rail.html）都命中。 */
 export function classifyViewUrl(url: string): ShellViewKind {
   if (!url) return 'unknown'
-  for (const kind of [
-    'rail',
-    'chrome',
-    'workspace',
-    'entry',
-    'notice',
-    'drag',
-    'assistant',
-  ] as const) {
+  for (const kind of ['rail', 'chrome', 'entry', 'notice', 'drag', 'assistant'] as const) {
     if (url.includes(`/${kind}.html`)) return kind
   }
   return 'unknown'
@@ -111,7 +110,11 @@ function assertTrustedSender(channel: keyof IpcChannels, event: IpcMainInvokeEve
       ? BUSINESS_UI_KINDS.includes(kind)
       : level === 'ai-ui'
         ? AI_UI_KINDS.includes(kind)
-        : SHELL_UI_KINDS.includes(kind)
+        : level === 'entry-ui'
+          ? ENTRY_UI_KINDS.includes(kind)
+          : level === 'entry-reopen'
+            ? ENTRY_REOPEN_KINDS.includes(kind)
+            : SHELL_UI_KINDS.includes(kind)
   if (!allowed) {
     throw new Error(`IPC 拒绝：${String(channel)} 仅允许 ${level} 视图，实际来源 ${kind}`)
   }

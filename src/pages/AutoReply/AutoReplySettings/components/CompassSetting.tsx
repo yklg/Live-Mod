@@ -87,7 +87,7 @@ export function CompassSetting() {
     updateEventReplyContents(type, newMessages)
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {autoReplyTypes.map(type => (
         <div key={type.id} className="space-y-2">
           <div className="flex items-center justify-between">

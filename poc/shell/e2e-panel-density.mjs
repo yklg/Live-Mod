@@ -103,8 +103,8 @@ async function teardown(ctx) {
 }
 
 const PANEL_STYLES = () => {
-  const card = document.querySelector('[data-testid="status-card"] [data-slot="card-content"]')
-  const title = document.querySelector('[data-testid="page-title"]')
+  const card = document.querySelector('[data-testid="status-card"] [data-slot="panel-section"]')
+  const title = document.querySelector('[data-testid="panel-title"]')
   return {
     cardPadding: card ? getComputedStyle(card).paddingLeft : null,
     titleFont: title ? getComputedStyle(title).fontSize : null,
@@ -146,12 +146,12 @@ async function main() {
     // ---- M1 密度/容器命中 + M2 首屏不滚动 ----
     try {
       const st = await railEval(rail, PANEL_STYLES)
-      const m1 = st.cardPadding === '16px' && st.titleFont === '16px'
+      const m1 = st.cardPadding === '12px' && st.titleFont === '13px'
       const m2 = st.scrollW !== null && st.scrollW <= st.clientW + 1
-      record('M1 面板密度（Card 16px / 标题 16px）', m1, JSON.stringify(st))
+      record('M1 面板密度（PanelSection 12px / 标题 13px）', m1, JSON.stringify(st))
       record('M2 中控台首屏无横向溢出', m2, `scrollW=${st.scrollW} clientW=${st.clientW}`)
     } catch (e) {
-      record('M1 面板密度（Card 16px / 标题 16px）', false, String(e.message ?? e))
+      record('M1 面板密度（PanelSection 12px / 标题 13px）', false, String(e.message ?? e))
       record('M2 中控台首屏无横向溢出', false, String(e.message ?? e))
     }
     await ctx.captureContainer('panel-density-light.png')
@@ -193,7 +193,7 @@ async function main() {
         await waitFor(
           async () => {
             const t = await railEval(rail, () =>
-              document.querySelector('[data-testid="page-title"]')?.textContent?.trim(),
+              document.querySelector('[data-testid="panel-title"]')?.textContent?.trim(),
             )
             return t === r.title ? t : null
           },
@@ -225,6 +225,13 @@ async function main() {
           )
         }
         if (r.id === 'popup') await ctx.captureContainer('panel-density-popup.png')
+        if (r.id === 'message') {
+          record(
+            'M11 自动发言 panelActions 可见',
+            (await rail.locator('text=开始任务').count()) > 0,
+            'TaskButton 在紧凑动作行',
+          )
+        }
         if (r.id === 'settings') {
           const layout = await railEval(rail, () => {
             const el = document.querySelector('[data-testid="settings-layout"]')
@@ -247,6 +254,26 @@ async function main() {
 
     // ---- M4 面板宽度 / 页面可见宽度（1280 / 1024 两档）----
     try {
+      await ctx.invoke('shell:railToggle', 'reply')
+      await sleep(500)
+      await rail.locator('button[title="设置"]').click()
+      await waitFor(
+        async () =>
+          (await railEval(rail, () =>
+            document.querySelector('[data-testid="panel-title"]')?.textContent?.trim(),
+          )) === '自动回复设置',
+        10_000,
+        '自动回复设置',
+      )
+      const backVisible = await rail.locator('[aria-label="返回"]').isVisible()
+      record('M12 自动回复设置 panelHeader back 可见', backVisible, '')
+      await rail.locator('[aria-label="返回"]').click()
+      await sleep(400)
+    } catch (e) {
+      record('M12 自动回复设置 panelHeader back 可见', false, String(e.message ?? e))
+    }
+
+    try {
       const d = await ctx.debug()
       const visible = d.pageBounds?.width ?? 0
       record(
@@ -263,7 +290,7 @@ async function main() {
       await sleep(500)
       const d1024 = await ctx.debug()
       record(
-        'M4b 最小窗（1024）dock overlay / page 912',
+        'M4b 最小窗（1024）dock overlay / page 968',
         d1024.windowWidth === 1024 && d1024.railWidth === expectDockW + 56,
         `window=${d1024.windowWidth} rail=${d1024.railWidth} page=${d1024.pageBounds?.width}`,
       )

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //   C-TR1 声明表存在（漏建则后续全部失效）
 //   C-TR2 rail（壳完整业务树）放行 —— dev 与打包 URL 都要认，这是 P0-1 的回归点；
 //         经典模式入口随经典模式移除而拒绝（来源 unknown）
-//   C-TR3 chrome / entry / notice 拒绝（缩小暴露面）
+//   C-TR3 chrome / legacy / notice 拒绝（缩小暴露面）
 //   C-TR4 未注册判定器 = fail-closed（拒绝，而不是默认放行）
 //   C-TR5 sender.getURL 异常仍归约为拒绝，不产生未处理异常逃逸
 //   C-TR6 未声明通道不校验（52 处注册里 50 处零回归）
@@ -155,6 +155,35 @@ describe('IPC 授权矩阵（TC-TR1~TR7）', () => {
       expect(() => call(IPC_CHANNELS.shell.assistantToggle, url)).toThrow(/仅允许 shell-ui/)
     }
   })
+
+  it('TC-TR10 entry-ui：只放行入口选择器；chrome/rail/assistant 拒绝', () => {
+    typedIpcMainHandle(IPC_CHANNELS.shell.entryCatalog, (() => ({
+      platforms: [],
+      remembered: {},
+    })) as never)
+    const entryUrl = 'http://localhost:5173/entry.html?view=entry'
+    expect(() => call(IPC_CHANNELS.shell.entryCatalog, entryUrl)).not.toThrow()
+    for (const url of [
+      DEV_RAIL,
+      'http://localhost:5173/chrome.html?view=chrome',
+      'file:///app/dist/assistant.html',
+    ]) {
+      expect(() => call(IPC_CHANNELS.shell.entryCatalog, url)).toThrow(/仅允许 entry-ui/)
+    }
+  })
+
+  it('TC-TR11 entry-reopen：entry/rail 放行；chrome/assistant 拒绝', () => {
+    typedIpcMainHandle(IPC_CHANNELS.shell.entryReopen, (() => undefined) as never)
+    for (const url of [DEV_RAIL, 'http://localhost:5173/entry.html?view=entry']) {
+      expect(() => call(IPC_CHANNELS.shell.entryReopen, url)).not.toThrow()
+    }
+    for (const url of [
+      'http://localhost:5173/chrome.html?view=chrome',
+      'file:///app/dist/assistant.html',
+    ]) {
+      expect(() => call(IPC_CHANNELS.shell.entryReopen, url)).toThrow(/仅允许 entry-reopen/)
+    }
+  })
 })
 
 describe('classifyViewUrl（P0-1 判据回归）', () => {
@@ -172,8 +201,12 @@ describe('classifyViewUrl（P0-1 判据回归）', () => {
     expect(classifyViewUrl('http://localhost:5173/')).toBe('unknown')
   })
 
-  it('assistant / drag 本地视图身份可识别（不是 remote page）', () => {
+  it('assistant / drag / entry 本地视图身份可识别（不是 remote page）', () => {
     expect(classifyViewUrl('file:///x/assistant.html')).toBe('assistant')
     expect(classifyViewUrl('http://127.0.0.1:7777/drag.html')).toBe('drag')
+    expect(classifyViewUrl('http://localhost:5173/entry.html?view=entry')).toBe('entry')
+    expect(classifyViewUrl('file:///Applications/Live%20Mod/dist/entry.html?view=entry')).toBe(
+      'entry',
+    )
   })
 })

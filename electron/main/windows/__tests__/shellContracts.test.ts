@@ -159,8 +159,10 @@ describe('入口隔离（TC-E1/E2 · A1 多入口物理预防）', () => {
     expect(all).not.toContain('IPC_CHANNELS.tasks.')
     expect(all).not.toContain("from '@/App'")
     expect(all).not.toContain('showComment')
-    // 入口只准用 shell:* 通道（唯一连接通道在 rail，入口禁止直连 connect）
-    expect(all).not.toContain('liveControl.connect')
+    // 入口只走 entryCatalog/entrySelect/entrySkip/entryRememberSet（唯一选择写路径在主进程）
+    expect(all).toContain('IPC_CHANNELS.shell.entryCatalog')
+    expect(all).toContain('IPC_CHANNELS.shell.entrySelect')
+    expect(all).toContain('IPC_CHANNELS.shell.entryRememberSet')
   })
 
   it('TC-E4 [notice 最小树] notice 入口模块图不含业务监听/tasks；只消费 shell:* 通道', () => {
@@ -199,44 +201,38 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     expect(railHtml, '容器根需 height:100% 保障 fixed/Portal 包含块=视口').toContain('height: 100%')
   })
 
-  it('TC-CQ2 [只加不删] 共享组件保留既有视口类，同时新增窄面板容器变体', () => {
+  it('TC-CQ2 [视觉契约] 共享原语使用 12px 卡片/圆角令牌/13px 正文；旧 16px 口径清零', () => {
     const ledger: Array<[string, string[]]> = [
       [
         'src/components/ui/card.tsx',
-        ['p-6', '@max-[900px]/panel:p-4', 'text-sm', '@max-[900px]/panel:text-xs'],
+        ['rounded-card', 'border-hairline', 'shadow-elevation-1', 'px-3 pt-3 pb-2', 'text-sm'],
       ],
-      [
-        'src/components/common/Page.tsx',
-        ['px-6 pb-4 pt-5', '@max-[900px]/panel:px-4', 'text-xl', '@max-[900px]/panel:text-base'],
-      ],
-      ['src/components/ui/input.tsx', ['md:text-sm', '@max-[900px]/panel:text-sm']],
-      ['src/components/ui/textarea.tsx', ['md:text-sm', '@max-[900px]/panel:text-sm']],
+      ['src/components/common/Page.tsx', ['text-[15px]', 'text-xs', 'panelHeader', 'px-3 pb-4']],
+      ['src/components/ui/input.tsx', ['h-8', 'rounded-control', 'text-sm']],
+      ['src/components/ui/textarea.tsx', ['rounded-control', 'text-sm']],
       [
         'src/components/ui/dialog.tsx',
-        [
-          'sm:max-w-lg',
-          '@max-[900px]/panel:max-w-lg',
-          'sm:flex-row',
-          '@max-[900px]/panel:flex-row',
-        ],
+        ['rounded-card', 'p-4', 'sm:max-w-sm', 'text-[15px]', 'text-xs'],
       ],
-      ['src/components/ui/alert-dialog.tsx', ['sm:text-left', '@max-[900px]/panel:text-left']],
-      [
-        'src/components/common/SettingsLayout.tsx',
-        ['grid-cols-[172px_1fr]', '@max-[900px]/panel:grid-cols-[148px_1fr]'],
-      ],
-      [
-        'src/components/ai-chat/APIKeyDialog.tsx',
-        ['sm:max-w-[425px]', '@max-[900px]/panel:max-w-[425px]'],
-      ],
+      ['src/components/ui/alert-dialog.tsx', ['rounded-card', 'p-4', 'text-left', 'text-xs']],
+      ['src/components/common/SettingsLayout.tsx', ['grid-cols-[148px_1fr]', 'gap-4']],
+      ['src/components/common/Panel.tsx', ['panel-section', 'rounded-card', 'shadow-elevation-1']],
+      ['src/components/ui/button.tsx', ['rounded-control', 'h-[30px]', 'text-xs']],
+      ['src/shell/EntrySelector.tsx', ['@max-[760px]/entry:grid-cols-1', 'rounded-card']],
+      ['src/index.css', ['--lm-radius-card: 12px', '--text-sm: var(--text-body)']],
     ]
     for (const [rel, needles] of ledger) {
       const src = readIfExists(rel)
       expect(src, `${rel} 必须存在`).not.toBeNull()
       for (const needle of needles) {
-        expect(src, `${rel} 缺少「${needle}」——只加不删契约被破坏`).toContain(needle)
+        expect(src, `${rel} 缺少「${needle}」——视觉契约被破坏`).toContain(needle)
       }
     }
+    const card = readIfExists('src/components/ui/card.tsx') ?? ''
+    expect(card, 'Card 必须删除 rounded-xl').not.toContain('rounded-xl')
+    expect(card, 'Card 必须删除 shadow-sm').not.toContain('shadow-sm')
+    const input = readIfExists('src/components/ui/input.tsx') ?? ''
+    expect(input, 'Input 不再保留 md:text-sm 视口断点').not.toContain('md:text-sm')
   })
 
   it('TC-CQ3 [C5 回退] Auto 页保留经典两列；600 面板内容不足 → 不使用面板两列变体（单列）', () => {
@@ -249,7 +245,7 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     }
   })
 
-  it('TC-CQ4 [路由清单] 单一源 8 条（无 AI）；ShellRail/router 消费同一源', () => {
+  it('TC-CQ4 [路由清单] 单一源 8 条（无 AI）；每个路由有唯一 panelTitle；ShellRail 消费同一源', () => {
     expect(SHELL_ROUTES.map(route => route.path).sort()).toEqual(
       [
         '/',
@@ -262,15 +258,18 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
         '/settings',
       ].sort(),
     )
+    const titles = SHELL_ROUTES.map(route => route.panelTitle)
+    expect(titles.every(Boolean), '每个路由必须有 panelTitle').toBe(true)
+    expect(new Set(titles).size, 'panelTitle 必须唯一').toBe(titles.length)
     const rail = readIfExists('src/shell/ShellRail.tsx') ?? ''
     expect(rail).toContain('SHELL_ROUTES.map')
+    expect(rail).toContain('panelTitle')
+    expect(rail).toContain('data-testid="panel-title"')
     expect(rail).not.toContain('/ai-chat')
-    const router = readIfExists('src/router/index.tsx') ?? ''
-    expect(router).toContain('SHELL_ROUTES.map')
-    expect(router).not.toContain('/ai-chat')
+    expect(readIfExists('src/router/index.tsx')).toBeNull()
   })
 
-  it('TC-CQ6 [最小窗/dock 门槛] app.ts minWidth=1024；shellLayout 暴露 320/360/420 与 PAGE_MIN=640', () => {
+  it('TC-CQ6 [最小窗/dock 门槛] app.ts minWidth=1024；无左栏 1056/1116；entry 52 顶栏', () => {
     const app = readIfExists('electron/main/app.ts') ?? ''
     expect(app).toContain('minWidth: 1024')
     const layout = readIfExists('electron/main/windows/shellLayout.ts') ?? ''
@@ -278,12 +277,42 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     expect(layout).toContain('export const DOCK_W = 360')
     expect(layout).toContain('export const DOCK_MAX = 420')
     expect(layout).toContain('export const PAGE_MIN = 640')
+    expect(layout).toContain('winW - dockWidth - RAIL_W')
+    expect(layout).toContain("mode === 'entry'")
+    expect(layout).not.toContain('LEFT_COMPACT_W')
   })
 
-  it('TC-CQ5 [经典隔离] 经典入口不声明面板容器（容器变体结构性不生效）', () => {
-    const indexHtml = readIfExists('index.html') ?? ''
-    const app = readIfExists('src/App.tsx') ?? ''
-    expect(indexHtml).not.toContain('@container/panel')
-    expect(app).not.toContain('@container/panel')
+  it('TC-CQ7 [工作台退场] workspace/场次域文件与运行时 token 清零；entry 容器与最小树保留', () => {
+    for (const rel of [
+      'workspace.html',
+      'src/shell/WorkspaceRoot.tsx',
+      'src/shell/workspace.tsx',
+      'src/shell/workspace.css',
+      'electron/main/windows/workspaceMode.ts',
+      'electron/main/windows/workspaceStartup.ts',
+      'electron/main/ipc/workspace.ts',
+      'electron/main/services/LiveHistoryStore.ts',
+      'electron/main/services/LiveSessionRecorder.ts',
+      'shared/liveHistory.ts',
+      'src/hooks/useLiveHistory.ts',
+    ]) {
+      expect(readIfExists(rel), `${rel} 必须已删除`).toBeNull()
+    }
+    const entryHtml = readIfExists('entry.html') ?? ''
+    expect(entryHtml, 'entry.html 必须声明容器').toContain('@container/entry')
+    const selector = readIfExists('src/shell/EntrySelector.tsx') ?? ''
+    expect(selector).toContain('@max-[760px]/entry:grid-cols-1')
+    const vite = readIfExists('vite.config.ts') ?? ''
+    expect(vite).toContain("entry: path.join(__dirname, 'entry.html')")
+    expect(vite).not.toContain("workspace: path.join(__dirname, 'workspace.html')")
+    const app = readIfExists('electron/main/app.ts') ?? ''
+    expect(app).toContain("'entry.html'")
+    expect(app).not.toContain('workspace.html')
+  })
+
+  it('TC-CQ5 [经典树退场] 经典入口、App、router 已删除', () => {
+    expect(readIfExists('index.html')).toBeNull()
+    expect(readIfExists('src/App.tsx')).toBeNull()
+    expect(readIfExists('src/router/index.tsx')).toBeNull()
   })
 })

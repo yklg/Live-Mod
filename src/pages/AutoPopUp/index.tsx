@@ -37,7 +37,7 @@ export default function AutoPopUp() {
       description="配置自动弹出商品的规则"
       actions={<TaskButton isTaskRunning={isRunning} onStartStop={handleTaskButtonClick} />}
     >
-      <div className="grid gap-5 xl:grid-cols-[2fr_1fr] xl:items-start" data-testid="auto-grid">
+      <div className="grid gap-3 xl:grid-cols-[2fr_1fr] xl:items-start" data-testid="auto-grid">
         <GoodsListCard />
         <PopUpSettingsCard />
       </div>
