@@ -1,19 +1,16 @@
 # Changelog
 
-## v1.10.0
+## v1.11.0
 
-[compare changes](https://github.com/yklg/Live-Mod/compare/v1.9.0...v1.10.0)
-
-### 🚀 Features
-
-- **ui:** 建立暖中性设计令牌与高密度视觉基线 ([7890945](https://github.com/yklg/Live-Mod/commit/7890945))
-- **shell:** 工作台化壳并收敛 AI 为全局浮窗 ([2c3ff67](https://github.com/yklg/Live-Mod/commit/2c3ff67))
-- **shell:** 第二期工作台壳与账号/场次单一源 ([4c4aa0c](https://github.com/yklg/Live-Mod/commit/4c4aa0c))
-
-## Unreleased
+[compare changes](https://github.com/yklg/Live-Mod/compare/v1.10.0...v1.11.0)
 
 ### ⚠️ 契约变更（Breaking · 开源 fork 注意）
 
+- **工作台（workbench）形态退场**：删除 `workspaceView` / `workspaceMode` / `workspaceStartup` /
+  `WorkspaceRoot` / `workspace.html` / `workspace.tsx` / `workspace.css`、`shell:workspace*` 通道与
+  `ipc/workspace`；恢复 entry 平台选择器视图，entry / live / browse 三形态由主进程 `shellMode` 单一真源裁决
+- **场次/直播历史下线**：删除 `LiveHistoryStore` / `LiveSessionRecorder` / `useLiveHistory` /
+  `shared/liveHistory`、`live-session-started/ended` 事件、`workspace:history` IPC 与账号快照场次字段
 - **移除连接降级回退**：attach 建立失败不再自动切换到外部浏览器重试，也不再写运行时降级状态。
   失败改为**如实上报**——主进程推一条带 `kind` 判别式的通知（`attach` / `page-closed` / `timeout` / `other`），
   不再出现「壳内连接失败，已回退外部浏览器登录」。`runtimeEnvState` 的 `degrade` / `isDegraded` / `clear`
@@ -32,6 +29,12 @@
 
 ### 🚀 Features
 
+- 壳视觉统一：右栏业务页统一改用 `Panel` / `PanelSummary` / `PanelSection` / `PanelRow`（12px 卡片、
+  13px 正文、30px 控件、12px 间距）；状态卡/页面/设置页与基础组件落到暖中性设计令牌，
+  `UI_STYLE_GUIDE` 与 `index.css` 同步（几何为无左栏：entry 52px / live +36 / browse +72）
+- entry/live/browse 三形态：新增 `entryStartup`（`railReady` 握手 → autoRestore live / 5s fallbackEntry）、
+  `entrySelection`（目录快照/选择/记忆）、`surfaceController`（表面转移纯函数）与
+  `shell:modeState` / `modeSet` / `modeSnapshot` / `entryRememberSet` 通道
 - 连接失败分类契约：新增 `ConnectionAbortedError` 与 `ConnectionFailureKind` 判别式，
   `AccountSession` 用 `connectId` + `AbortController` 取代 `sessionClosed` 布尔做判别——
   用户主动断开与「页面被外部关闭」明确分成两类，不再混淆
@@ -42,11 +45,27 @@
   （瞬时且延迟 0）、拖拽期禁过渡
 - rail 宽 0 的兼容回归：toast 的四种 variant 全部转发通知覆盖层（面板关着也看得见）；
   UpdateDialog 在面板关闭时改走通知层，同一状态周期只提示一次
+- 经典渲染树收尾：删除 `index.html` / `main.tsx` / `App.tsx` / `router` / `Sidebar` / `LogDisplayer` /
+  `use-mobile` / `App.css` / `wdyr`；`useGlobalIpcListener` 抽到 hooks；vite 入口收敛为
+  chrome / rail / entry / notice / drag；E2E 新增 `e2e-entry-startup` / `e2e-visual-tokens` /
+  `e2e-tabs` / `e2e-tab-liveness` / `e2e-popup-tabs` / `e2e-assistant` 等，删除已退休脚本
 
 ### 🐞 Bug Fixes
 
 - 修复「已回退外部浏览器」的误报：连接阶段的错误此前没有分类契约，用户手动断开、页面被拆这类
   **正常结束**也会被当成 attach 失败伪装成降级。现在只有真失败才通知，且不再换形态继续跑
+- 修复壳 v3 E2E 用例：`e2e-shell-login` 改用 rail 页面 IPC 触发面板；`e2e-panel-density` M12
+  恢复点击自动回复页内「设置」按钮
+
+## v1.10.0
+
+[compare changes](https://github.com/yklg/Live-Mod/compare/v1.9.0...v1.10.0)
+
+### 🚀 Features
+
+- **ui:** 建立暖中性设计令牌与高密度视觉基线 ([7890945](https://github.com/yklg/Live-Mod/commit/7890945))
+- **shell:** 工作台化壳并收敛 AI 为全局浮窗 ([2c3ff67](https://github.com/yklg/Live-Mod/commit/2c3ff67))
+- **shell:** 第二期工作台壳与账号/场次单一源 ([4c4aa0c](https://github.com/yklg/Live-Mod/commit/4c4aa0c))
 
 ## v1.9.0
 
