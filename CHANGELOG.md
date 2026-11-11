@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.11.1
+
+[compare changes](https://github.com/yklg/Live-Mod/compare/v1.11.0...v1.11.1)
+
+### 🐞 Bug Fixes
+
+- **shell:** 修复顶栏悬浮菜单「点击 tab 无反应」：菜单宿主是 rail 视图，focus/blur 收起会在
+  click 之前把菜单关掉。现在只由明确外部信号收起（页面 mouseDown、顶栏其它区域点击、ESC、
+  表面/标签迁移），并补 G4 源码守卫防止回归
+- **shell:** 中控台与自由浏览合并为同一标签轴：账号卡固定第一张、不可关闭/拖动，移除
+  「自由浏览/收起标签」模式开关；标签行在非 entry 模式常显
+- **shell:** 「展开 Live Mod」菜单去掉外层卡片边框/底色，只保留独立 tab 卡；点击页面、
+  顶栏其它区域或 ESC 均自动收起；「帮助」外链打开后同步收起
+- **shell:** 中控台默认缩放调整为 80%，`Cmd+0` 重置回站点默认；用户手动缩放仍按 host 记忆
+- **test:** 新增菜单/标签轴/缩放回归覆盖：菜单 6 路由选中、内部不误收起、ESC、帮助外链、
+  账号固定卡与快捷键、account live 后台弹窗、缩放默认/记忆/回落；单测 540 通过，
+  壳 E2E 10/10 脚本通过
+
 ## v1.11.0
 
 [compare changes](https://github.com/yklg/Live-Mod/compare/v1.10.0...v1.11.0)
