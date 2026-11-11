@@ -1,6 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
 import { Download, RefreshCw, Rocket } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { HtmlRenderer } from '@/components/common/HtmlRenderer'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,7 @@ const updateSources: UpdateSource[] = [
   { value: 'custom', label: '自定义' },
 ]
 
-export function UpdateDialog() {
+export function UpdateDialog({ panelOpen = true }: { panelOpen?: boolean }) {
   const status = useUpdateStore.use.status()
   const setStatus = useUpdateStore.use.setStatus()
   const progress = useUpdateStore.use.progress()
@@ -46,11 +46,29 @@ export function UpdateDialog() {
   const customUpdateSource = useUpdateConfigStore(s => s.customSource)
   const setCustomUpdateSource = useUpdateConfigStore(s => s.setCustomSource)
 
+  // 壳 v3 · Wave 2（计划 §4.3）：右栏收起时 rail 视图宽度为 0，
+  // 对话框跟着看不见 → 面板关着时改走通知层（独立 notice 窗口，一定可见）。
+  // 同一状态周期只提示一次：要么通知、要么对话框，不同时出现（CV-I17）。
+  const notifiedStatus = useRef<string | null>(null)
   useEffect(() => {
-    if (status !== 'idle' && status !== 'checking') {
-      setDialogOpen(true)
+    if (status === 'idle' || status === 'checking') {
+      notifiedStatus.current = null
+      return
     }
-  }, [status])
+    if (panelOpen) {
+      setDialogOpen(true)
+      return
+    }
+    if (notifiedStatus.current === status) return
+    notifiedStatus.current = status
+    void window.ipcRenderer
+      .invoke(IPC_CHANNELS.shell.notify, {
+        variant: 'info',
+        title: '有新版本可用',
+        description: '打开 Live Mod 面板 → 设置 → 更新，即可查看详情并更新。',
+      })
+      .catch(() => {})
+  }, [status, panelOpen])
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {

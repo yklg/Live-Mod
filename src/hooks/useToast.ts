@@ -166,8 +166,15 @@ function toast({ ...props }: Toast) {
   }
 }
 
-/** 壳模式：success/error(string) 转发到通知覆盖层（不写本地 store，避免 56px rail 裁剪/双份展示） */
-function routeToastToNotice(variant: 'success' | 'error', message: string): boolean {
+/**
+ * 壳模式：全部 variant 转发到通知覆盖层。
+ *
+ * 壳 v3 · Wave 2 为什么必须扩到四种：右栏图标条删除后，rail 视图收起时**宽度为 0**，
+ * 本地 Toaster 随之不可见——只转发 success/error 的话，warning/info 会掉进
+ * 看不见的本地 store，用户永远收不到。这里把四个 variant 全部转发，
+ * 通知层（独立 notice 窗口）才是"面板关着也看得见"的唯一通路。
+ */
+function routeToastToNotice(variant: NoticeVariant, message: string): boolean {
   if (typeof window === 'undefined') return false
   if (!shouldRouteToastToNotice(window.__lmView)) return false
   // fire-and-forget：主进程负责校验/缓冲；通知层不可用时不阻塞业务调用
@@ -192,6 +199,20 @@ const toasty = {
       ? SHELL_NOTICE_STUB
       : toast({
           variant: 'destructive',
+          description: message,
+        }),
+  warning: (message: string) =>
+    routeToastToNotice('warning', message)
+      ? SHELL_NOTICE_STUB
+      : toast({
+          variant: 'default',
+          description: message,
+        }),
+  info: (message: string) =>
+    routeToastToNotice('info', message)
+      ? SHELL_NOTICE_STUB
+      : toast({
+          variant: 'default',
           description: message,
         }),
 }

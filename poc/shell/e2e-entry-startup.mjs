@@ -49,8 +49,8 @@ async function main() {
       'entry 首屏',
     )
     record(
-      'ES-1 首屏 entry + 52 顶栏 + 1224 宽',
-      d.chromeHeight === 52 && d.entryBounds?.width === 1224 && d.pageBounds === null,
+      'ES-1 首屏 entry + 52 顶栏 + 满宽 1280',
+      d.chromeHeight === 52 && d.entryBounds?.width === 1280 && d.pageBounds === null,
       JSON.stringify({ mode: d.shellMode, chrome: d.chromeHeight, entry: d.entryBounds }),
     )
     const order = d.childrenUrls ?? []
@@ -98,7 +98,7 @@ async function main() {
     )
     record(
       'ES-5 先自由浏览 → browse + page 出现',
-      browse.pageBounds?.width === 1224,
+      browse.pageBounds?.width === 1280,
       JSON.stringify({ mode: browse.shellMode, page: browse.pageBounds }),
     )
   } catch (e) {

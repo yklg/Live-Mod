@@ -136,7 +136,7 @@ async function main() {
     await waitFor(
       async () => {
         const d = await ctx.debug()
-        return d.panelOpen && d.railWidth > 56 ? d : null
+        return d.panelOpen && d.railWidth > 0 ? d : null
       },
       15_000,
       '面板展开',
@@ -256,7 +256,7 @@ async function main() {
     try {
       await ctx.invoke('shell:railToggle', 'reply')
       await sleep(500)
-      await rail.locator('button[title="设置"]').click()
+      await ctx.invoke('shell:railToggle', 'settings')
       await waitFor(
         async () =>
           (await railEval(rail, () =>
@@ -278,7 +278,7 @@ async function main() {
       const visible = d.pageBounds?.width ?? 0
       record(
         'M4a dock 宽度与 page（1280 窗）',
-        d.railWidth === expectDockW + 56 && visible > 0,
+        d.railWidth === expectDockW && visible > 0,
         `window=${d.windowWidth} rail=${d.railWidth} page=${visible}`,
       )
       await ctx.app.evaluate(({ BrowserWindow }) => {
@@ -290,8 +290,8 @@ async function main() {
       await sleep(500)
       const d1024 = await ctx.debug()
       record(
-        'M4b 最小窗（1024）dock overlay / page 968',
-        d1024.windowWidth === 1024 && d1024.railWidth === expectDockW + 56,
+        'M4b 最小窗（1024）dock overlay / page 满宽 1024',
+        d1024.windowWidth === 1024 && d1024.railWidth === expectDockW,
         `window=${d1024.windowWidth} rail=${d1024.railWidth} page=${d1024.pageBounds?.width}`,
       )
       // ---- M9 minWidth 钳制 ----

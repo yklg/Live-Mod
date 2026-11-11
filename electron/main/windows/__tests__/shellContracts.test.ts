@@ -272,7 +272,7 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     expect(readIfExists('src/router/index.tsx')).toBeNull()
   })
 
-  it('TC-CQ6 [最小窗/dock 门槛] app.ts minWidth=1024；无左栏 1056/1116；entry 52 顶栏', () => {
+  it('TC-CQ6 [最小窗/dock 门槛] app.ts minWidth=1024；图标条已删 → 1000/1060；entry 52 顶栏', () => {
     const app = readIfExists('electron/main/app.ts') ?? ''
     expect(app).toContain('minWidth: 1024')
     const layout = readIfExists('electron/main/windows/shellLayout.ts') ?? ''
@@ -280,9 +280,12 @@ describe('面板密度/容器查询契约（计划 v3 · TC-CQ1~5）', () => {
     expect(layout).toContain('export const DOCK_W = 360')
     expect(layout).toContain('export const DOCK_MAX = 420')
     expect(layout).toContain('export const PAGE_MIN = 640')
-    expect(layout).toContain('winW - dockWidth - RAIL_W')
+    // 壳 v3 · Wave 2：图标条删除后 dock 门槛不再扣图标条宽度 → 1000/1060 是 360/420 的边界
+    expect(layout).toContain('winW - dockWidth >= PAGE_MIN')
     expect(layout).toContain("mode === 'entry'")
     expect(layout).not.toContain('LEFT_COMPACT_W')
+    // 图标条宽度常量整体退场（守卫：写回即红）
+    expect(layout).not.toContain('RAIL_W')
   })
 
   it('TC-CQ7 [工作台退场] workspace/场次域文件与运行时 token 清零；entry 容器与最小树保留', () => {

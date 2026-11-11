@@ -202,6 +202,14 @@
   --color-surface-1: hsl(var(--surface-1));
   --color-surface-2: hsl(var(--surface-2));
   --color-surface-3: hsl(var(--surface-3));
+
+  /* 动效令牌（壳 v3 · Wave 2 · 计划 §7）：
+     令牌定义在 :root（见文件上方），但 Tailwind 只从 @theme inline 生成工具类，
+     不在这里登记的话 `duration-motion-base` / `ease-standard` 不会存在。 */
+  --duration-motion-fast: 100ms;
+  --duration-motion-base: 180ms;
+  --duration-motion-slow: 280ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --color-border-hairline: hsl(var(--border-hairline));
 
   --shadow-elevation-1: var(--elevation-1);
@@ -250,4 +258,53 @@
   ::selection {
     background-color: hsl(var(--primary) / 0.15);
   }
+}
+
+/* ============================================================
+   动效契约（壳 v3 · Wave 2 · 计划 §13）
+   ============================================================
+   1) 尊重 prefers-reduced-motion：动画与过渡全部降为**瞬时且延迟为 0**，
+      但**不得**把内容一起跳过——最终状态仍要完整可见可点。
+   2) 拖拽期禁用过渡（§13-4）：拖拽是连续几何操作，插值会拖影。
+      拖拽期间由 JS 给 <html> 打 data-dragging，由这里关掉过渡。 */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 拖拽期：只保留离散开合缓动，拖拽本身不插值 */
+html[data-dragging='true'] *,
+html[data-dragging='true'] *::before,
+html[data-dragging='true'] *::after {
+  transition: none !important;
+}
+
+/* 动效工具类（壳 v3 · Wave 2）：
+   tw-animate-css 的 `animate-in` / `animate-out` 走的是
+   `animation: enter var(--tw-duration,.15s) var(--tw-ease,ease)` 简写，
+   因此时长/曲线要通过 **--tw-duration / --tw-ease** 传入，
+   只写 `duration-*`（animation-duration）会被简写里的 .15s 覆盖。
+   这里把设计令牌接到这两个变量上，组件只需写 `motion-base`。 */
+@utility motion-base {
+  --tw-duration: 180ms;
+  --tw-ease: var(--ease-standard);
+}
+
+@utility motion-fast {
+  --tw-duration: 100ms;
+  --tw-ease: var(--ease-standard);
+}
+
+@utility motion-slow {
+  --tw-duration: 280ms;
+  --tw-ease: var(--ease-standard);
 }

@@ -30,8 +30,9 @@ describe('panelController 开合决策表', () => {
     expect(f.ctrl.isOpen()).toBe(true)
     expect(f.ctrl.route()).toBe('popup')
     expect(f.pushed.at(-1)).toEqual({ panelOpen: true, routeId: 'popup' })
-    expect(f.applied.at(-1)?.rail.width).toBe(416)
-    expect(f.applied.at(-1)?.page?.width).toBe(1440 - 360 - 56)
+    // 壳 v3 · Wave 2：图标条删除 → rail 宽度就是 dock 宽度；overlay 下 page 满宽不变
+    expect(f.applied.at(-1)?.rail.width).toBe(360)
+    expect(f.applied.at(-1)?.page?.width).toBe(1440)
   })
 
   it('同 route 再 toggle → close；异 route → 保持打开换页', () => {
@@ -56,13 +57,14 @@ describe('panelController 开合决策表', () => {
     expect(f.ctrl.isOpen()).toBe(false)
   })
 
-  it('1024 + 360：overlay 下 page bounds 与收起态相同', () => {
+  it('1024 + 360：overlay 下 page 满宽不变（面板浮在右侧，不挤占官方页）', () => {
     const closed = setup({ winW: 1024, winH: 720 })
     const open = setup({ winW: 1024, winH: 720 })
     closed.ctrl.close()
     open.ctrl.open('popup')
     expect(open.applied.at(-1)?.page).toEqual(closed.applied.at(-1)?.page)
-    expect(open.applied.at(-1)?.page?.width).toBe(1024 - 56)
+    expect(open.applied.at(-1)?.page?.width).toBe(1024)
+    expect(open.applied.at(-1)?.rail.width).toBe(360)
     expect(open.pushed.at(-1)?.panelOpen).toBe(true)
   })
 
@@ -76,10 +78,10 @@ describe('panelController 开合决策表', () => {
     expect(f.pushed.at(-1)?.panelOpen).toBe(true)
   })
 
-  it('entry 下 dockOpen 不生效（page=null）', () => {
+  it('entry 下 dockOpen 不生效（page=null，rail 宽度归零）', () => {
     const f = setup({ mode: 'entry' })
     f.ctrl.open('popup')
     expect(f.applied.at(-1)?.page).toBeNull()
-    expect(f.applied.at(-1)?.rail.width).toBe(56)
+    expect(f.applied.at(-1)?.rail.width).toBe(0)
   })
 })

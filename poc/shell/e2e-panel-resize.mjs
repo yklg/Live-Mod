@@ -39,11 +39,15 @@ try {
   await waitFor(async () => (await debug()).panelOpen, 5000, 'dock 打开')
   const base = await debug()
   record(
-    'R1 默认 dock 360 / rail 416',
-    base.dockWidth === 360 && base.railWidth === 416,
+    'R1 默认 dock 360 / rail 360（壳 v3 · Wave 2：图标条已删，rail 宽=面板宽）',
+    base.dockWidth === 360 && base.railWidth === 360,
     JSON.stringify({ dock: base.dockWidth, rail: base.railWidth }),
   )
-  record('R2 dock 让出 page 864', base.pageBounds?.width === 864, String(base.pageBounds?.width))
+  record(
+    'R2 overlay 下 page 满宽 1280（面板浮在右侧不挤占官方页）',
+    base.pageBounds?.width === 1280,
+    String(base.pageBounds?.width),
+  )
 
   await app.evaluate(({ app: a }) => a.__shellPanelDragBegin(360, 1000))
   record('R3 导体显示', (await debug()).panelDragVisible === true, '')
@@ -51,12 +55,12 @@ try {
   const wide = await debug()
   record(
     'R4 向左拖到 420 上限',
-    wide.dockWidth === 420 && wide.railWidth === 476,
+    wide.dockWidth === 420 && wide.railWidth === 420,
     JSON.stringify({ dock: wide.dockWidth, rail: wide.railWidth }),
   )
   record(
-    'R5 dock 变宽 page 让出到 804',
-    wide.pageBounds?.width === 804,
+    'R5 dock 变宽 page 仍满宽 1280',
+    wide.pageBounds?.width === 1280,
     String(wide.pageBounds?.width),
   )
 
@@ -64,7 +68,7 @@ try {
   const narrow = await debug()
   record(
     'R6 右拖越过下限钳到 320',
-    narrow.dockWidth === 320 && narrow.railWidth === 376,
+    narrow.dockWidth === 320 && narrow.railWidth === 320,
     String(narrow.dockWidth),
   )
   await app.evaluate(({ app: a }) => a.__shellPanelResizeEnd())
@@ -112,8 +116,8 @@ try {
   await sleep(250)
   const live = await debug()
   record(
-    'R11 live 后 rail 476 / page 804',
-    live.railWidth === 476 && live.pageBounds?.width === 804,
+    'R11 live 后 rail 420 / page 满宽 1280',
+    live.railWidth === 420 && live.pageBounds?.width === 1280,
     JSON.stringify({ rail: live.railWidth, page: live.pageBounds }),
   )
 } catch (e) {

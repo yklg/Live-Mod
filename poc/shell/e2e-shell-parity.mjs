@@ -87,7 +87,7 @@ async function main() {
     const closed = await debug()
     await toggle('popup')
     const open = await debug()
-    const paired = s => s.panelOpen === s.railWidth > 56
+    const paired = s => s.panelOpen === s.railWidth > 0
     record(
       'TC-G1',
       closed.panelOpen === false && open.panelOpen === true && paired(open) && paired(closed),
