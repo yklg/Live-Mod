@@ -70,12 +70,28 @@ export default function ShellChrome() {
     [],
   )
 
+  const menuOpen = useShellMode(s => s.menuOpen)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
+
+  // 菜单失焦收起：菜单本体在 rail 视图，点击官方页由主进程 focus 兜住；
+  // 顶栏内部的点击不会改变焦点（主进程收不到 focus），在这里补齐「点其它区域收起」。
+  useEffect(() => {
+    if (!menuOpen) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuTriggerRef.current?.contains(e.target as Node)) return
+      call('railMenuToggle')
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () => document.removeEventListener('pointerdown', onPointerDown, true)
+  }, [menuOpen, call])
+
   useEffect(() => {
     const el = tabsRef.current?.querySelector<HTMLElement>(`[data-tab-id="${state.activeId}"]`)
     el?.scrollIntoView({ block: 'nearest', inline: 'center' })
   }, [state.activeId])
 
-  const visibleTabs = useMemo(() => state.tabs.filter(t => t.kind !== 'account'), [state.tabs])
+  // 标签轴合并（壳 v3）：账号 Tab 也是标签行的一部分（固定第一张，不可关闭）。
+  const visibleTabs = useMemo(() => state.tabs, [state.tabs])
   const isBrowse = mode === 'browse'
   const isEntry = mode === 'entry'
 
@@ -128,15 +144,19 @@ export default function ShellChrome() {
     }
   }, [call, state.tabs, visibleTabs])
 
+  // 账号 Tab 是固定卡：批量关闭必须排除它（否则会把中控台一起关掉）。
   const closeOthers = (id: number) =>
     call(
       'tabCloseBatch',
-      visibleTabs.filter(t => t.id !== id).map(t => t.id),
+      visibleTabs.filter(t => t.id !== id && t.kind !== 'account').map(t => t.id),
     )
   const closeRight = (index: number) =>
     call(
       'tabCloseBatch',
-      visibleTabs.slice(index + 1).map(t => t.id),
+      visibleTabs
+        .slice(index + 1)
+        .filter(t => t.kind !== 'account')
+        .map(t => t.id),
     )
 
   return (
@@ -198,7 +218,9 @@ export default function ShellChrome() {
             <BookOpen className="size-4" />
           </button>
           <button
+            ref={menuTriggerRef}
             type="button"
+            data-menu-trigger
             className="ml-1 flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
             onClick={() => call('railMenuToggle')}
             title="展开 Live Mod 功能菜单"
@@ -286,22 +308,11 @@ export default function ShellChrome() {
             className="h-7 min-w-0 flex-1 rounded-full border border-border bg-muted px-3 text-xs outline-none focus:border-primary"
             placeholder="搜索或输入网址"
           />
-          <button
-            type="button"
-            className={`ml-1 rounded px-2 py-1 text-xs ${
-              isBrowse
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted'
-            }`}
-            onClick={() => call('modeSet', isBrowse ? 'live' : 'browse')}
-          >
-            {isBrowse ? '收起标签' : '自由浏览'}
-          </button>
         </div>
       )}
 
-      {/* 标签行 36px（仅自由浏览） */}
-      {isBrowse && (
+      {/* 标签行 36px（非 entry 常显：账号 Tab 是固定第一张卡，中控台不再是独立模式） */}
+      {!isEntry && (
         <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border bg-muted px-2">
           <div
             ref={tabsRef}
@@ -319,6 +330,8 @@ export default function ShellChrome() {
                     tabIndex={0}
                     aria-selected={tab.active}
                     onPointerDown={e => {
+                      // 账号 Tab 固定第一张：不可拖动。
+                      if (tab.kind === 'account') return
                       if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
                       dragRef.current = { id: tab.id, startX: e.clientX, started: false }
                       setDragId(tab.id)
@@ -328,7 +341,7 @@ export default function ShellChrome() {
                       call('tabActivate', tab.id)
                     }}
                     onAuxClick={e => {
-                      if (e.button !== 1) return
+                      if (e.button !== 1 || tab.kind === 'account') return
                       e.preventDefault()
                       call('tabClose', tab.id)
                     }}
@@ -351,23 +364,28 @@ export default function ShellChrome() {
                       <Tv className="size-3 shrink-0 opacity-50" />
                     )}
                     <span className="truncate">{tab.title || tab.url || '新标签页'}</span>
-                    <button
-                      type="button"
-                      className={`rounded p-0.5 hover:bg-muted ${
-                        tab.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                      }`}
-                      onClick={e => {
-                        e.stopPropagation()
-                        call('tabClose', tab.id)
-                      }}
-                      aria-label="关闭标签页"
-                    >
-                      <X className="size-3" />
-                    </button>
+                    {tab.kind !== 'account' && (
+                      <button
+                        type="button"
+                        className={`rounded p-0.5 hover:bg-muted ${
+                          tab.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                        onClick={e => {
+                          e.stopPropagation()
+                          call('tabClose', tab.id)
+                        }}
+                        aria-label="关闭标签页"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    )}
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent className="w-48">
-                  <ContextMenuItem onSelect={() => call('tabClose', tab.id)}>
+                  <ContextMenuItem
+                    disabled={tab.kind === 'account'}
+                    onSelect={() => call('tabClose', tab.id)}
+                  >
                     关闭标签页
                   </ContextMenuItem>
                   <ContextMenuItem

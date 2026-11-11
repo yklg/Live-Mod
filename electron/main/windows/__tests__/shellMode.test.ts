@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createShellMode, isShellMode } from '#/windows/shellMode'
+import { createShellMode, isShellMode, shellModeForTabKind } from '#/windows/shellMode'
 
 describe('shellMode 状态机', () => {
   it('默认 entry；entry/live/browse 三态迁移', () => {
@@ -31,5 +31,12 @@ describe('shellMode 状态机', () => {
     expect(isShellMode('browse')).toBe(true)
     expect(isShellMode('workbench')).toBe(false)
     expect(isShellMode('')).toBe(false)
+  })
+
+  // 壳 v3 合并：mode 不再是用户开关，而是 active Tab 类型的派生结果。
+  it('shellModeForTabKind：account→live，free/popup→browse', () => {
+    expect(shellModeForTabKind('account')).toBe('live')
+    expect(shellModeForTabKind('free')).toBe('browse')
+    expect(shellModeForTabKind('popup')).toBe('browse')
   })
 })

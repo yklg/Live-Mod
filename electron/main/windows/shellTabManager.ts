@@ -266,7 +266,7 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
     // 且无法恢复（isFocused 全 false）——后台 Tab 不挂载即可完全避免该副作用，用户切换到该 Tab 时再挂载。
     const mountNow = foreground
     if (mountNow) deps.mount(view, 0) // 层级铁律：pageView 恒 index 0
-    tabs.push({
+    const tab: Tab = {
       id,
       kind,
       accountId: opts.accountId ?? null,
@@ -274,7 +274,15 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
       mounted: mountNow,
       partition,
       popupOrigins: opts.popupOrigins,
-    })
+    }
+    // 账号 Tab 固定在最左（标签轴第一张不可关闭卡，壳 v3 合并）：
+    // 只影响展示顺序，不改变挂载 index（层级仍由 mount(view, 0) 决定）。
+    if (kind === 'account') {
+      const accountCount = tabs.reduce((n, t) => n + (t.kind === 'account' ? 1 : 0), 0)
+      tabs.splice(accountCount, 0, tab)
+    } else {
+      tabs.push(tab)
+    }
     if (opts.accountId) accountIndex.set(opts.accountId, id)
     const prevActiveId = activeId
     activeId = id
@@ -343,7 +351,11 @@ export function createShellTabManager(deps: ShellTabManagerDeps): ShellTabManage
   const moveTab = (id: number, toIndex: number) => {
     const from = tabs.findIndex(t => t.id === id)
     if (from < 0) return
-    const to = Math.max(0, Math.min(tabs.length - 1, Math.round(toIndex)))
+    const moving = tabs[from]
+    // 账号 Tab 是固定卡：不可拖动，其它 Tab 也不得越过账号区插到其左侧。
+    if (moving.kind === 'account') return
+    const accountCount = tabs.reduce((n, t) => n + (t.kind === 'account' ? 1 : 0), 0)
+    const to = Math.max(accountCount, Math.min(tabs.length - 1, Math.round(toIndex)))
     if (to === from) return
     const [t] = tabs.splice(from, 1)
     tabs.splice(to, 0, t)

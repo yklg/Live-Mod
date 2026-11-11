@@ -59,17 +59,35 @@ function readMemory(opts?: ZoomStoreIo): ZoomMemory {
   }
 }
 
-export function loadZoomFactor(host: string, opts?: ZoomStoreIo): number {
+/**
+ * 读取 host 的记忆缩放。
+ * `defaultFactor` 是该站点的默认值（平台层提供，如中控台 0.8）：
+ * 未记录时返回它；不传则回落到通用默认 1。
+ */
+export function loadZoomFactor(
+  host: string,
+  opts?: ZoomStoreIo,
+  defaultFactor: number = ZOOM_DEFAULT,
+): number {
   const factor = readMemory(opts).byHost[host]
-  return typeof factor === 'number' ? factor : ZOOM_DEFAULT
+  return typeof factor === 'number' ? factor : clampZoom(defaultFactor)
 }
 
-export function saveZoomFactor(host: string, factor: number, opts?: ZoomStoreIo): boolean {
+/**
+ * 写入 host 的缩放记忆。
+ * 与站点默认值相同 → 删除该 host（未手动缩放的站点不写文件）。
+ */
+export function saveZoomFactor(
+  host: string,
+  factor: number,
+  opts?: ZoomStoreIo,
+  defaultFactor: number = ZOOM_DEFAULT,
+): boolean {
   const p = opts?.path ?? getZoomStorePath()
   try {
     const memory = readMemory({ ...opts, path: p })
     const normalized = clampZoom(factor)
-    if (normalized === ZOOM_DEFAULT) delete memory.byHost[host]
+    if (normalized === clampZoom(defaultFactor)) delete memory.byHost[host]
     else memory.byHost[host] = normalized
     const write =
       opts?.writeFile ?? ((file: string, data: string) => fs.writeFileSync(file, data, 'utf8'))

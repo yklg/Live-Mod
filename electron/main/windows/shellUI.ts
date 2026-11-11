@@ -26,6 +26,7 @@ import { isKnownShellRouteId } from 'shared/shellRoutes'
 import type { ShellChromeState, ShellMode } from 'shared/shellState'
 import { createLogger } from '#/logger'
 import { accountManager } from '#/managers/AccountManager'
+import { defaultZoomForHost } from '#/platforms/zoomPolicy'
 import { LAYOUT_STORE_VERSION, loadLayoutState, saveLayoutState } from '#/services/LayoutStore'
 import { loadZoomFactor, saveZoomFactor } from '#/services/ZoomStore'
 import { classifyViewUrl, setTrustResolver } from '#/utils/ipc'
@@ -77,7 +78,7 @@ import { clearPopupMode, getPopupMode, setPopupMode } from './popupIntent'
 import { classifyPopup } from './popupPolicy'
 import { clampDockWidth, computeShellBounds, DOCK_W, draggedPanelWidth } from './shellLayout'
 import { installShellMenu } from './shellMenu'
-import { createShellMode } from './shellMode'
+import { createShellMode, shellModeForTabKind } from './shellMode'
 import { createShellTabManager, type TabView } from './shellTabManager'
 import { planSurface, type SurfaceOptions } from './surfaceController'
 import { chromeUa } from './ua'
@@ -169,7 +170,7 @@ function currentZoomFactor(): number {
 
 function persistZoom(wc: Electron.WebContents, factor: number) {
   const key = zoomStoreKey(wc.getURL())
-  if (key) saveZoomFactor(key, factor)
+  if (key) saveZoomFactor(key, factor, undefined, defaultZoomForHost(key))
 }
 
 function applyZoomStep(delta: number) {
@@ -183,15 +184,19 @@ function applyZoomStep(delta: number) {
 function applyZoomReset() {
   const wc = activeTabContents()
   if (!wc) return
-  wc.setZoomFactor(ZOOM_DEFAULT)
-  persistZoom(wc, ZOOM_DEFAULT)
+  const key = zoomStoreKey(wc.getURL())
+  // 重置回该站点的默认值（中控台 80%），而不是全局 1——否则用户按 Cmd+0 会再次被裁切。
+  const factor = key ? defaultZoomForHost(key) : ZOOM_DEFAULT
+  wc.setZoomFactor(factor)
+  if (key) saveZoomFactor(key, factor, undefined, factor)
 }
 
-/** 导航完成后按 host 恢复记忆缩放（官方中控台按站点记住用户偏好） */
+/** 导航完成后按 host 恢复缩放：用户记忆优先，其次平台默认值（中控台 80%）。 */
 function applyStoredZoom(wc: Electron.WebContents) {
   const key = zoomStoreKey(wc.getURL())
   if (!key) return
-  const factor = clampZoom(loadZoomFactor(key))
+  const fallback = defaultZoomForHost(key)
+  const factor = clampZoom(loadZoomFactor(key, undefined, fallback))
   if (Math.abs(factor - wc.getZoomFactor()) > 0.001) wc.setZoomFactor(factor)
 }
 
@@ -252,25 +257,28 @@ function installTabShortcuts(wc: Electron.WebContents) {
     if (key === 't') {
       event.preventDefault()
       if (input.shift) {
-        if (mode === 'browse') tabManager.reopenLast()
+        if (mode !== 'entry') tabManager.reopenLast()
         return
       }
-      if (mode === 'browse') tabManager.createTab({})
-      else shellModeSet('browse')
+      // 标签轴合并后：非 entry 直接新建自由 Tab（不再先切 browse 模式）。
+      if (mode === 'entry') return
+      tabManager.createTab({})
       return
     }
     if (key === 'w') {
       event.preventDefault()
-      if (mode !== 'browse') return
+      if (mode === 'entry') return
       const state = tabManager.state()
       const active = state.tabs.find(t => t.id === state.activeId)
+      // 账号 Tab 是固定卡：Cmd+W 对它 no-op（关闭账号由账号移除流程负责）。
       if (active && active.kind !== 'account') tabManager.closeTab(active.id)
       return
     }
     if (/^[1-9]$/.test(input.key)) {
       event.preventDefault()
-      if (mode !== 'browse') return
-      const tabs = tabManager.state().tabs.filter(t => t.kind !== 'account')
+      if (mode === 'entry') return
+      // 编号包含固定的账号 Tab（浏览器语义：标签序即可见顺序）。
+      const tabs = tabManager.state().tabs
       const index = Number(input.key) === 9 ? tabs.length - 1 : Number(input.key) - 1
       const target = tabs[index]
       if (target) tabManager.activateTab(target.id)
@@ -342,6 +350,8 @@ export function attachContainer(
     return classifyViewUrl(event.sender.getURL())
   })
 
+  // 上一次推送的 active Tab：只有「激活变化」才触发菜单收起，标题/加载态更新不误伤。
+  let lastActiveTabId: number | null = null
   tabManager = createShellTabManager({
     newView: opts => {
       const view = new WebContentsView({
@@ -361,7 +371,14 @@ export function attachContainer(
       installPanelToggleShortcut(view.webContents)
       installTabShortcuts(view.webContents)
       installAssistantShortcut(view.webContents)
-      // 导航完成恢复该站点记忆缩放（官方中控台默认 100% 会被窗口裁切）
+      // 菜单外部点击收起（壳 v3）：菜单宿主是独立 rail 视图，点击官方页不会进入 rail 的 DOM 事件。
+      // Electron 36 无 before-mouse-event，但 input-event 会携带 mouseDown/pointerDown —— 这是
+      // 「点击页面」最直接的主进程信号（焦点事件在窗口未获焦时可能不触发）。
+      view.webContents.on('input-event', (_event, input) => {
+        if (input.type !== 'mouseDown' && input.type !== 'pointerDown') return
+        if (panel.isMenuOpen()) panel.closeMenu()
+      })
+      // 导航完成恢复该站点缩放（中控台默认 80%，用户记忆优先）
       view.webContents.on('did-finish-load', () => applyStoredZoom(view.webContents))
       view.webContents.on('did-navigate', () => applyStoredZoom(view.webContents))
       // ===== 弹窗语义（fix-shell-popup-navigation-liveend · Phase 2 · A1）=====
@@ -429,7 +446,8 @@ export function attachContainer(
           logger.warn('popup-rule=new-tab 壳容器未就绪，降级拒绝：', url.slice(0, 80))
           return { action: 'deny' }
         }
-        if (action.activate) shellModeSet('browse')
+        // 模式不再在这里手工切换：active Tab 变成 popup 后由 pushState 派生 browse
+        // （后台打开保持当前中控台前台，标签行里新增一张卡，用户可自行切换）。
         const popupTabId = tabManager.createPopupTab({
           url,
           partition: opts.partition,
@@ -478,6 +496,19 @@ export function attachContainer(
     },
     pushState: state => {
       windowManager.sendTo('chrome', IPC_CHANNELS.shell.tabsState, state)
+      const activeChanged = state.activeId !== lastActiveTabId
+      lastActiveTabId = state.activeId
+      // entry 模式没有标签表面：模式只由入口选择/跳过决定，不被后台 Tab 事件改写。
+      if (shellMode.mode() === 'entry') return
+      // 模式派生（壳 v3 合并）：active Tab 是账号页 → live，自由/弹窗 → browse。
+      const active = state.tabs.find(t => t.id === state.activeId)
+      const nextMode = active ? shellModeForTabKind(active.kind) : null
+      if (nextMode && nextMode !== shellMode.mode()) {
+        shellMode.set(nextMode)
+        pushShellChromeState()
+      }
+      // 激活变化 = 表面切换：菜单不得残留到新表面。
+      if (activeChanged && panel.isMenuOpen()) panel.closeMenu()
     },
     // Tab 生命周期变化 → 布局层重排（几何唯一真源仍是 panelController.computeShellBounds）。
     // E2E 实证：运行时新建 pageView 若不立即重排会停在 0×0——登录页已开在壳内 Tab 却不可见，
@@ -506,8 +537,22 @@ export function attachContainer(
     },
     pushRail: s => {
       windowManager.sendTo('ui', IPC_CHANNELS.shell.railState, s)
+      // 菜单开合变化同步到 chrome：顶栏据此启用「点其它区域收起」。
+      pushShellChromeState()
     },
   })
+
+  // 菜单失焦收起（壳 v3）：任一壳视图获得/失去焦点都视为交互离开菜单。
+  // focus 覆盖「点到官方页/入口」，blur 覆盖「焦点从顶栏/菜单移走但目标视图未拿焦」的时序，
+  // 两者互补（E2E 无 OS 窗口焦点时 focus 可能不触发，blur 仍可观测）。
+  const dismissMenuOnFocus = () => {
+    if (panel.isMenuOpen()) panel.closeMenu()
+  }
+  for (const wc of [chromeView.webContents, railView.webContents, getEntryWebContents()]) {
+    if (!wc) continue
+    wc.on('focus', dismissMenuOnFocus)
+    wc.on('blur', dismissMenuOnFocus)
+  }
 
   const relayout = () => panel.resize()
   win.on('resize', relayout)
@@ -653,9 +698,9 @@ export function shellRailMenuSelect(routeId: string) {
   persistLayout()
 }
 
-/** chrome 模式快照（唯一消费者是 ShellChrome）。 */
+/** chrome 模式快照（唯一消费者是 ShellChrome）：模式 + 菜单开合（用于顶栏点击外部收起）。 */
 export function shellChromeSnapshot(): ShellChromeState {
-  return { mode: shellMode.mode() }
+  return { mode: shellMode.mode(), menuOpen: panel.isMenuOpen() }
 }
 
 function pushShellChromeState() {
@@ -668,6 +713,8 @@ export function shellModeSet(mode: ShellMode) {
 
 /** 所有模式变更的唯一表面入口：entry 显隐/page/dock 一起改，禁止调用方各自显隐。 */
 export function applyShellSurface(mode: ShellMode, opts: SurfaceOptions = {}) {
+  // 表面切换一律先收起顶栏菜单：菜单只属于切换前的表面（与面板互斥同一口径）。
+  if (panel.isMenuOpen()) panel.closeMenu()
   const plan = planSurface(mode, opts)
   if (!shellMode.set(mode)) return
   if (plan.entryVisible) showEntry()
@@ -933,8 +980,16 @@ function registerShellDebug() {
     })
     return wc.id
   }
-  a.__shellFocusView = (name: 'chrome' | 'rail') => {
-    const wc = name === 'chrome' ? chromeView?.webContents : railView?.webContents
+  a.__shellFocusView = (name: 'chrome' | 'rail' | 'page') => {
+    const wc =
+      name === 'chrome'
+        ? chromeView?.webContents
+        : name === 'rail'
+          ? railView?.webContents
+          : (() => {
+              const id = tabManager?.activeWebContentsId()
+              return id != null ? electronWebContents.fromId(id) : null
+            })()
     wc?.focus()
     return wc?.id ?? null
   }

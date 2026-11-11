@@ -1,5 +1,7 @@
 // 壳布局几何唯一真源：纯函数，零 Electron import。
-// 模式：entry（52px 顶栏，无左栏）/ live（52+36）/ browse（52+36+36）。
+// 模式：entry（52px 顶栏，无左栏）/ live 与 browse（52+36+36，标签行常显）。
+// 为什么 live/browse 同高：中控台与自由浏览共用同一条标签轴（壳 v3 合并），
+// 模式只由 active Tab 类型派生（account→live / free|popup→browse），不再决定几何。
 // 布局形态：overlay（浮层覆盖，默认）/ dock（让位，保留但默认不启用）。
 // 约束：page bounds 只由本函数产出；overlay 下 page 永远满宽（面板浮在右侧，不挤占官方页）。
 //
@@ -50,13 +52,14 @@ export const MENU_H = 296
 
 export const PAGE_MIN = 640 // 官方页不重排的既有门禁（**仅 dock 分支使用**）
 
-// live 模式总高（52 产品顶栏 + 36 工具条）；notice 等子窗口初始位置兼容用。
+// 历史兼容常量（52 产品顶栏 + 36 工具条）：notice 等子窗口初始位置对齐用，
+// 不代表当前非 entry 总高（现为 TOPBAR_H + BROWSER_BAR_H + TABSTRIP_H）。
 export const CHROME_H = TOPBAR_H + BROWSER_BAR_H
 
 export function chromeHeight(mode: ShellMode): number {
   if (mode === 'entry') return TOPBAR_H
-  if (mode === 'browse') return TOPBAR_H + BROWSER_BAR_H + TABSTRIP_H
-  return TOPBAR_H + BROWSER_BAR_H
+  // 标签行常显（中控台也是标签轴上的第一张固定卡）：live/browse 同高。
+  return TOPBAR_H + BROWSER_BAR_H + TABSTRIP_H
 }
 
 /**

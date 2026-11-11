@@ -641,3 +641,27 @@ describe('shellTabManager 排序/批量关闭/重开（TC-T24~T29）', () => {
     expect(f.manager.reopenLast()).toBeNull()
   })
 })
+
+// ===== 壳 v3 合并：账号 Tab 是标签轴上的固定第一张卡 =====
+describe('shellTabManager 固定账号卡（壳 v3 合并）', () => {
+  it('账号 Tab 固定在最左；free/popup 追加在其后', () => {
+    const f = setup()
+    const free = f.manager.createTab({})
+    const account = f.manager.createTab({ accountId: 'a1' })
+    const popup = f.manager.createPopupTab({
+      url: 'https://compass.jinritemai.com/x',
+      partition: accountTabPartition('a1'),
+    })
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([account, free, popup])
+  })
+
+  it('moveTab：账号卡不可移动，其它 Tab 不得越过账号区', () => {
+    const f = setup()
+    const account = f.manager.createTab({ accountId: 'a1' })
+    const free = f.manager.createTab({})
+    f.manager.moveTab(account, 1)
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([account, free])
+    f.manager.moveTab(free, 0)
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([account, free])
+  })
+})

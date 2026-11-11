@@ -91,4 +91,16 @@ describe('ZoomStore（TC-ZS1~ZS6）', () => {
       }),
     ).toBe(false)
   })
+
+  it('TC-ZS7 站点默认值：未记录 → defaultFactor；与默认相同不落盘', () => {
+    const io = memoryIo(null)
+    // 中控台默认 80%：没有记忆时直接返回 0.8，而不是全局 1
+    expect(loadZoomFactor('buyin.jinritemai.com', io.io, 0.8)).toBe(0.8)
+    // 用户手动放大到 100% → 必须落盘（1 ≠ 站点默认 0.8）
+    expect(saveZoomFactor('buyin.jinritemai.com', 1, io.io, 0.8)).toBe(true)
+    expect(loadZoomFactor('buyin.jinritemai.com', io.io, 0.8)).toBe(1)
+    // 重置回站点默认 → 删除该 host（文件不膨胀）
+    saveZoomFactor('buyin.jinritemai.com', 0.8, io.io, 0.8)
+    expect(JSON.parse(io.dump()).byHost).toEqual({})
+  })
 })

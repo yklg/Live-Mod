@@ -72,7 +72,7 @@
 
 ## 8. 壳界面几何
 
-- 顶栏三行：产品顶栏 `TOPBAR_H=52`；浏览器工具条 `BROWSER_BAR_H=36`（仅 live/browse）；标签行 `TABSTRIP_H=36`（仅 browse）。总高 entry 52 / live 88 / browse 124；窗口最小宽 1024
+- 顶栏三行：产品顶栏 `TOPBAR_H=52`；浏览器工具条 `BROWSER_BAR_H=36`（非 entry）；标签行 `TABSTRIP_H=36`（非 entry 常显）。总高 entry 52 / live 124 / browse 124；窗口最小宽 1024
 - 无左栏：page x=0；entry 视图覆盖 page 区域（满宽 `winW`），entry 模式强制关闭 dock 与悬浮菜单
 - **右栏图标条已删除（壳 v3 · Wave 2）**：rail 视图自此**只承载面板**，收起时宽度归零
   （`width=0`，视图保留不销毁——`railReady` 握手依赖它存在）；功能入口改由**顶栏悬浮菜单**承担
@@ -83,7 +83,7 @@
 - **面板默认浮层覆盖（overlay）**：page 永远满宽，面板浮在右侧；`dockFits`/`PAGE_MIN` 只在保留的
   `layoutMode='dock'` 分支生效（门槛 `PAGE_MIN=640` → 360→1000、420→1060），默认不启用
 - 面板标题单一源：ShellRail 头 `h-10` 标题（13px，`data-testid="panel-title"`）是唯一 h1；`SHELL_ROUTES.panelTitle` 供标题，Page 在 panel 内隐藏重复标题，有 back/actions 时保留紧凑行
-- 中控是常驻表面：`kind:'account'` 的账号 Tab 不进标签行、不可由 UI 关闭；标签行只显示自由浏览的 free/popup Tab
+- 中控是标签轴上的固定第一张卡：`kind:'account'` 的账号 Tab 固定在最左、不可由 UI 关闭、不可拖动；free/popup Tab 追加其后。mode 由 active Tab 类型派生（account→live / free|popup→browse），不再有「自由浏览」模式开关
 - AI 助手：全局浮窗，默认 520×640、最小 400×440、边距 12、吸附 20/28；顶栏 sparkle + `⌘J` 开关；右栏无 AI 图标/面板；配置在浮窗「更多」
 
 ## 9. 组件复用

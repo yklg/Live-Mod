@@ -26,9 +26,9 @@ import {
 //   I5 dockFits 只在 dock 分支被调用（overlay 不挤占 page，不需要门禁）
 
 describe('chromeHeight / dock 常量', () => {
-  it('三模式高度：entry 52 / live 88 / browse 124', () => {
+  it('三模式高度：entry 52 / live 124 / browse 124（标签行常显，中控台也在标签轴上）', () => {
     expect(chromeHeight('entry')).toBe(TOPBAR_H)
-    expect(chromeHeight('live')).toBe(TOPBAR_H + BROWSER_BAR_H)
+    expect(chromeHeight('live')).toBe(TOPBAR_H + BROWSER_BAR_H + TABSTRIP_H)
     expect(chromeHeight('browse')).toBe(TOPBAR_H + BROWSER_BAR_H + TABSTRIP_H)
   })
 
@@ -78,10 +78,10 @@ describe('computeShellBounds 三模式表（壳 v3 · Wave 2）', () => {
       dockWidth: 360,
       activeTabPresent: true,
     })
-    expect(r.chrome.height).toBe(88)
+    expect(r.chrome.height).toBe(124)
     expect(r.entry).toBeNull()
-    expect(r.page).toEqual({ x: 0, y: 88, width: 1280, height: 712 })
-    expect(r.rail).toEqual({ x: 1280 - 360, y: 88, width: 360, height: 712 })
+    expect(r.page).toEqual({ x: 0, y: 124, width: 1280, height: 676 })
+    expect(r.rail).toEqual({ x: 1280 - 360, y: 124, width: 360, height: 676 })
   })
 
   it('I1 收起态：rail 宽度 0，page 满宽', () => {
@@ -92,8 +92,8 @@ describe('computeShellBounds 三模式表（壳 v3 · Wave 2）', () => {
       dockOpen: false,
       activeTabPresent: true,
     })
-    expect(r.rail).toEqual({ x: 1280, y: 88, width: 0, height: 712 })
-    expect(r.page).toEqual({ x: 0, y: 88, width: 1280, height: 712 })
+    expect(r.rail).toEqual({ x: 1280, y: 124, width: 0, height: 676 })
+    expect(r.page).toEqual({ x: 0, y: 124, width: 1280, height: 676 })
   })
 
   it('I2 overlay：打开与收起的 page 完全一致（面板浮在右侧不挤占官方页）', () => {
@@ -114,7 +114,7 @@ describe('computeShellBounds 三模式表（壳 v3 · Wave 2）', () => {
     })
     expect(overlay.page).toEqual(closed.page)
     expect(overlay.page?.width).toBe(1024)
-    expect(overlay.rail).toEqual({ x: 1024 - 360, y: 88, width: 360, height: 632 })
+    expect(overlay.rail).toEqual({ x: 1024 - 360, y: 124, width: 360, height: 596 })
   })
 
   it('I3 dock 分支（保留，不启用）：page 让出 dock 宽度，且受 PAGE_MIN 门禁', () => {
@@ -128,7 +128,7 @@ describe('computeShellBounds 三模式表（壳 v3 · Wave 2）', () => {
       activeTabPresent: true,
     })
     expect(a.page?.width).toBe(1280 - 360)
-    expect(a.rail).toEqual({ x: 1280 - 360, y: 88, width: 360, height: 712 })
+    expect(a.rail).toEqual({ x: 1280 - 360, y: 124, width: 360, height: 676 })
 
     // 1000 + 360：恰好 dock，page = PAGE_MIN
     const b = computeShellBounds({
@@ -210,7 +210,7 @@ describe('顶栏悬浮菜单几何（壳 v3 · Wave 3）', () => {
       menuOpen: true,
       activeTabPresent: true,
     })
-    expect(menu.rail).toEqual({ x: 1280 - MENU_W, y: 88, width: MENU_W, height: MENU_H })
+    expect(menu.rail).toEqual({ x: 1280 - MENU_W, y: 124, width: MENU_W, height: MENU_H })
     // 菜单不挤占官方页：page 与收起态完全一致
     expect(menu.page).toEqual(closed.page)
     expect(menu.page?.width).toBe(1280)
@@ -244,7 +244,7 @@ describe('顶栏悬浮菜单几何（壳 v3 · Wave 3）', () => {
 })
 
 describe('入口几何', () => {
-  it('entry 1280：52 顶栏、满宽 1280；live 88', () => {
+  it('entry 1280：52 顶栏、满宽 1280；live 124', () => {
     expect(computeEntryBounds({ winW: 1280, winH: 800, mode: 'entry' })).toEqual({
       x: 0,
       y: 52,
@@ -253,9 +253,9 @@ describe('入口几何', () => {
     })
     expect(computeEntryBounds({ winW: 1280, winH: 800, mode: 'live' })).toEqual({
       x: 0,
-      y: 88,
+      y: 124,
       width: 1280,
-      height: 712,
+      height: 676,
     })
   })
 

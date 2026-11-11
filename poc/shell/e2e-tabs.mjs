@@ -1,7 +1,8 @@
 // 标签窗口级 E2E（LM_SHELL_DEBUG=1 调试契约）：创建/拖拽/右键/中键/关闭/重开。
 // 运行：先 node node_modules/vite/bin/vite.js build，再 node poc/shell/e2e-tabs.mjs
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { _electron as electron } from 'playwright'
+import { chromium, _electron as electron } from 'playwright'
 
 const results = []
 const record = (id, ok, detail) => {
@@ -10,8 +11,9 @@ const record = (id, ok, detail) => {
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+const profile = `/tmp/lm-e2e-tabs-${Date.now()}`
 const app = await electron.launch({
-  args: ['.', `--user-data-dir=/tmp/lm-e2e-tabs-${Date.now()}`],
+  args: ['.', `--user-data-dir=${profile}`],
   cwd: path.resolve(import.meta.dirname, '../..'),
   env: { ...process.env, LM_SHELL_DEBUG: '1' },
   timeout: 30_000,
@@ -106,6 +108,38 @@ try {
   const reopened = await tabReopen()
   await waitFor(async () => (await debug()).tabs.some(t => t.id === reopened), 5000, '重开')
   record('T10 重开最近关闭', typeof reopened === 'number', String(reopened))
+
+  // 顶栏菜单失焦契约（壳 v3）：点顶栏其它区域 / 页面获焦都应自动收起。
+  await chrome.click('text=展开 Live Mod')
+  await waitFor(async () => (await debug()).menuOpen === true, 5000, '菜单打开')
+  await sleep(150) // 等 chrome 渲染层收到 menuOpen 状态（Pointerdown 监听安装完成）
+  record('T11 顶栏菜单打开', true, '')
+  await chrome.click('input[placeholder="搜索或输入网址"]')
+  await waitFor(async () => (await debug()).menuOpen === false, 5000, '顶栏点击收起')
+  record('T12 点顶栏其它区域收起菜单', true, '')
+  // about:blank 的 pageView 不出现在 CDP target 列表；建一个真实 data: 页面作为点击目标。
+  const clickTab = await tabCreate({ url: 'data:text/html,<h1>click-target</h1>' })
+  await waitFor(
+    async () => (await debug()).tabs.some(t => t.id === clickTab && t.active),
+    5000,
+    '点击目标页激活',
+  )
+  await chrome.click('text=展开 Live Mod')
+  await waitFor(async () => (await debug()).menuOpen === true, 5000, '菜单再次打开')
+  await sleep(150)
+  // 真实鼠标点进页面：WebContentsView 无 DOM 可点，经 CDP 命中页面 target。
+  const port = readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf-8').split('\n')[0].trim()
+  const cdp = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
+  try {
+    const pages = cdp.contexts().flatMap(c => c.pages())
+    const page = pages.find(p => p.url().startsWith('data:'))
+    if (!page) throw new Error('未找到官方页 WebContentsView target')
+    await page.mouse.click(40, 40)
+  } finally {
+    await cdp.close().catch(() => {})
+  }
+  await waitFor(async () => (await debug()).menuOpen === false, 5000, '点击页面收起')
+  record('T13 点击页面收起菜单', true, '')
 } catch (e) {
   record('E2E 异常', false, e.message)
 } finally {

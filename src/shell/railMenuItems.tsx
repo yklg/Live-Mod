@@ -54,42 +54,38 @@ export const RAIL_MENU_ITEMS: readonly RailMenuItem[] = [
  */
 export function RailMenuList({ activeRouteId }: { activeRouteId?: string | null }) {
   return (
-    <div
+    // 只呈现功能卡本身：不再有外层卡片边框/底色/标题栏（菜单宿主只负责定位与进出场）。
+    <ul
       data-testid="rail-menu"
       data-state="open"
-      className="flex w-full flex-col overflow-hidden rounded-card border border-border bg-card shadow-float motion-base animate-in fade-in-0 slide-in-from-top-2"
+      className="flex max-h-[288px] w-full flex-col gap-1 overflow-y-auto"
     >
-      <div className="border-b border-border px-3 py-2 text-[11px] font-medium text-muted-foreground">
-        Live Mod 功能
-      </div>
-      <ul className="max-h-[264px] overflow-y-auto py-1">
-        {RAIL_MENU_ITEMS.map(item => {
-          const Icon = item.icon
-          const isActive = activeRouteId === item.id
-          return (
-            <li key={item.id}>
-              <button
-                type="button"
-                data-testid={`rail-menu-item-${item.id}`}
-                aria-current={isActive ? 'true' : undefined}
-                onClick={() => {
-                  if (item.external) {
-                    void window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, GITHUB_URL)
-                    return
-                  }
-                  void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railMenuSelect, item.id)
-                }}
-                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors hover:bg-muted ${
-                  isActive ? 'bg-primary/10 text-primary' : 'text-foreground'
-                }`}
-              >
-                <Icon className="size-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
+      {RAIL_MENU_ITEMS.map(item => {
+        const Icon = item.icon
+        const isActive = activeRouteId === item.id
+        return (
+          <li key={item.id}>
+            <button
+              type="button"
+              data-testid={`rail-menu-item-${item.id}`}
+              aria-current={isActive ? 'true' : undefined}
+              onClick={() => {
+                if (item.external) {
+                  void window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, GITHUB_URL)
+                  return
+                }
+                void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railMenuSelect, item.id)
+              }}
+              className={`flex w-full items-center gap-2.5 rounded-card border-hairline border-border bg-card px-3 py-2 text-left text-[13px] shadow-elevation-1 transition-colors hover:bg-muted ${
+                isActive ? 'border-primary text-primary' : 'text-foreground'
+              }`}
+            >
+              <Icon className="size-4 shrink-0" />
+              <span className="truncate">{item.label}</span>
+            </button>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
