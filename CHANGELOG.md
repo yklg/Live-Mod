@@ -12,6 +12,42 @@
 
 ## Unreleased
 
+### ⚠️ 契约变更（Breaking · 开源 fork 注意）
+
+- **移除连接降级回退**：attach 建立失败不再自动切换到外部浏览器重试，也不再写运行时降级状态。
+  失败改为**如实上报**——主进程推一条带 `kind` 判别式的通知（`attach` / `page-closed` / `timeout` / `other`），
+  不再出现「壳内连接失败，已回退外部浏览器登录」。`runtimeEnvState` 的 `degrade` / `isDegraded` / `clear`
+  与 `envMatrix` 的 `degraded` 入参一并删除（评论链路的同名 `degraded` 语义不变）
+- **删除「强制外部浏览器」逃生口**：设置页的该开关、`useChromeConfig.forceExternal`、
+  `connectPayload` 的 mode 映射与 `connectModePayload.ts` 整体删除。连接形态改由主进程裁决链唯一决定
+  （`payload.mode` ?? 壳内默认层（白名单平台）?? 静态矩阵 ?? `launch`）
+- **连接契约改为结构化结果**：`tasks:liveControl:connect` 的返回值从 `boolean` 改为
+  `{ok:true} | {ok:false, aborted:true, connectId} | {ok:false, kind, reason}`。
+  `aborted`（用户主动断开/重启）**静默**：不弹 toast、不推通知
+- **删除 56px 右栏图标条**：功能入口改由顶栏「展开 Live Mod」按钮弹出的**悬浮菜单**（232×296 单列
+  图标 + 名称）承担。rail 视图自此只承载面板，收起时宽度归零（视图保留不销毁）
+- **面板默认浮层覆盖（overlay）**：官方中控台页面宽度不再被面板挤占（page 恒为满宽）。
+  `dockFits` / `PAGE_MIN` 只在保留的 `layoutMode='dock'` 分支生效（默认不启用），门槛随图标条删除
+  调整为 360→1000、420→1060
+
+### 🚀 Features
+
+- 连接失败分类契约：新增 `ConnectionAbortedError` 与 `ConnectionFailureKind` 判别式，
+  `AccountSession` 用 `connectId` + `AbortController` 取代 `sessionClosed` 布尔做判别——
+  用户主动断开与「页面被外部关闭」明确分成两类，不再混淆
+- 顶栏悬浮菜单：新增 `shell:railMenuToggle` / `shell:railMenuSelect` 通道；菜单与面板互斥，
+  复用面板入口的 entry 守卫（entry 模式不弹菜单、不开面板），菜单态不写布局持久化
+- 动效契约落地：面板与菜单的出现/收起改为「保留节点 + `data-state`」（离场动画有了载体）；
+  补 motion 令牌进 `@theme inline` 与 `motion-*` 工具类、`prefers-reduced-motion` 全局降级
+  （瞬时且延迟 0）、拖拽期禁过渡
+- rail 宽 0 的兼容回归：toast 的四种 variant 全部转发通知覆盖层（面板关着也看得见）；
+  UpdateDialog 在面板关闭时改走通知层，同一状态周期只提示一次
+
+### 🐞 Bug Fixes
+
+- 修复「已回退外部浏览器」的误报：连接阶段的错误此前没有分类契约，用户手动断开、页面被拆这类
+  **正常结束**也会被当成 attach 失败伪装成降级。现在只有真失败才通知，且不再换形态继续跑
+
 ## v1.9.0
 
 ### 🚀 Features

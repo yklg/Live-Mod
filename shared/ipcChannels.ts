@@ -126,6 +126,10 @@ export const IPC_CHANNELS = {
     windowClose: 'shell:windowClose',
     railToggle: 'shell:railToggle',
     railState: 'shell:railState',
+    // 顶栏悬浮菜单（壳 v3 · Wave 3）：右侧 56px 图标条删除后，功能入口改由
+    // 顶栏「展开 Live Mod」按钮开出的悬浮列表承担
+    railMenuToggle: 'shell:railMenuToggle',
+    railMenuSelect: 'shell:railMenuSelect',
     warnToast: 'shell:warnToast',
     uiStatus: 'shell:uiStatus',
     resetLoginState: 'shell:resetLoginState',

@@ -10,6 +10,8 @@ import {
   DOCK_W,
   dockFits,
   draggedPanelWidth,
+  MENU_H,
+  MENU_W,
   PAGE_MIN,
   TABSTRIP_H,
   TOPBAR_H,
@@ -188,6 +190,56 @@ describe('computeShellBounds 三模式表（壳 v3 · Wave 2）', () => {
       activeTabPresent: true,
     }
     expect(computeShellBounds(input)).toEqual(computeShellBounds(input))
+  })
+})
+
+describe('顶栏悬浮菜单几何（壳 v3 · Wave 3）', () => {
+  it('菜单开：rail 232×296 浮在右上，page 不变', () => {
+    const closed = computeShellBounds({
+      winW: 1280,
+      winH: 800,
+      mode: 'live',
+      dockOpen: false,
+      activeTabPresent: true,
+    })
+    const menu = computeShellBounds({
+      winW: 1280,
+      winH: 800,
+      mode: 'live',
+      dockOpen: false,
+      menuOpen: true,
+      activeTabPresent: true,
+    })
+    expect(menu.rail).toEqual({ x: 1280 - MENU_W, y: 88, width: MENU_W, height: MENU_H })
+    // 菜单不挤占官方页：page 与收起态完全一致
+    expect(menu.page).toEqual(closed.page)
+    expect(menu.page?.width).toBe(1280)
+  })
+
+  it('菜单优先级高于面板：两者同开时按菜单几何走', () => {
+    const r = computeShellBounds({
+      winW: 1280,
+      winH: 800,
+      mode: 'live',
+      dockOpen: true,
+      dockWidth: 360,
+      menuOpen: true,
+      activeTabPresent: true,
+    })
+    expect(r.rail.width).toBe(MENU_W)
+    expect(r.rail.height).toBe(MENU_H)
+  })
+
+  it('entry 模式下菜单不生效（入口=平台选择器，菜单/面板都不该出现）', () => {
+    const r = computeShellBounds({
+      winW: 1280,
+      winH: 800,
+      mode: 'entry',
+      menuOpen: true,
+      activeTabPresent: true,
+    })
+    expect(r.rail.width).toBe(0)
+    expect(r.page).toBeNull()
   })
 })
 

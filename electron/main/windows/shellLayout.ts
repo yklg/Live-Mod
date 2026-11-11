@@ -41,6 +41,13 @@ export const DOCK_MIN = 320
 export const DOCK_W = 360
 export const DOCK_MAX = 420
 
+/**
+ * 顶栏悬浮菜单尺寸（壳 v3 · Wave 3）。
+ * 232 与工作台左栏同宽（视觉一致）；296 是七项单列列表的高度（含行距与内边距）。
+ */
+export const MENU_W = 232
+export const MENU_H = 296
+
 export const PAGE_MIN = 640 // 官方页不重排的既有门禁（**仅 dock 分支使用**）
 
 // live 模式总高（52 产品顶栏 + 36 工具条）；notice 等子窗口初始位置兼容用。
@@ -88,6 +95,8 @@ export interface ShellLayoutInput {
   panelOpen?: boolean
   /** 第一期兼容：等价 dockWidth。 */
   panelWidth?: number
+  /** 顶栏悬浮菜单是否打开（壳 v3 · Wave 3）：优先级高于面板。 */
+  menuOpen?: boolean
   activeTabPresent: boolean
 }
 
@@ -106,6 +115,7 @@ export function computeShellBounds({
   dockWidth,
   panelOpen,
   panelWidth,
+  menuOpen = false,
   activeTabPresent,
 }: ShellLayoutInput): ShellBounds {
   const bodyY = chromeHeight(mode)
@@ -115,10 +125,16 @@ export function computeShellBounds({
   const open = (dockOpen ?? panelOpen ?? false) && mode !== 'entry'
   const width = clampDockWidth(dockWidth ?? panelWidth ?? DOCK_W)
   const pagePresent = activeTabPresent && mode !== 'entry'
+  // 菜单态优先于面板态（两者互斥，见 panelController）
+  const menuActive = menuOpen && mode !== 'entry'
 
   let rail: Bounds
   let page: Bounds | null
-  if (!open) {
+  if (menuActive) {
+    // 顶栏悬浮菜单：固定尺寸浮层，page 不变
+    rail = { x: winW - MENU_W, y: bodyY, width: MENU_W, height: MENU_H }
+    page = pagePresent ? { x: 0, y: bodyY, width: winW, height } : null
+  } else if (!open) {
     // 收起：rail 宽度归零（视图保留不销毁，见文件头硬约束）
     rail = { x: winW, y: bodyY, width: 0, height }
     page = pagePresent ? { x: 0, y: bodyY, width: winW, height } : null
@@ -132,8 +148,7 @@ export function computeShellBounds({
     page = pagePresent ? { x: 0, y: bodyY, width: winW, height } : null
   }
 
-  const entry: Bounds | null =
-    mode === 'entry' ? { x: 0, y: bodyY, width: winW, height } : null
+  const entry: Bounds | null = mode === 'entry' ? { x: 0, y: bodyY, width: winW, height } : null
 
   return { chrome, entry, rail, page }
 }

@@ -198,7 +198,16 @@ function applyStoredZoom(wc: Electron.WebContents) {
 /** Cmd/Ctrl + =/-/0 快捷键（菜单加速器被系统菜单消费时此路不触发；未被消费时兜底） */
 function installZoomShortcuts(wc: Electron.WebContents) {
   wc.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' || !(input.meta || input.control)) return
+    if (input.type !== 'keyDown') return
+    // ESC 关顶栏悬浮菜单（壳 v3 · Wave 3 · P1-4 双保险）：
+    // 焦点可能在 page（官方远程页，无 preload，拿不到渲染层 keydown）/ chrome / rail 任一处，
+    // 这里在主进程侧兜住"焦点不在 rail"的情况。
+    if (input.key === 'Escape' && panel.isMenuOpen()) {
+      event.preventDefault()
+      panel.closeMenu()
+      return
+    }
+    if (!(input.meta || input.control)) return
     if (input.key === '=' || input.key === '+') {
       event.preventDefault()
       applyZoomStep(ZOOM_STEP)
@@ -623,6 +632,27 @@ export function shellRailToggle(routeId?: string | null) {
   persistLayout()
 }
 
+/**
+ * 顶栏悬浮菜单开关（壳 v3 · Wave 3 · 计划 §5.2）。
+ *
+ * **必须复用面板入口的 entry 守卫**：entry 模式下面板本就不该出现（入口=平台选择器），
+ * 菜单同理。若新建一条平行 IPC 直连 panelController，就会绕开这个不变量——
+ * surfaceController 的「entry 模式关闭 dock」不变量就漏了一个入口。
+ *
+ * 菜单态**不写持久化**（P1-5）：开关菜单 3 次不应改变 LayoutStore.dockOpen。
+ */
+export function shellRailMenuToggle() {
+  if (shellMode.mode() === 'entry') return
+  panel.toggleMenu()
+}
+
+/** 选中菜单项：菜单关 + 面板开（选中项）。 */
+export function shellRailMenuSelect(routeId: string) {
+  if (shellMode.mode() === 'entry') return
+  panel.selectMenu(routeId)
+  persistLayout()
+}
+
 /** chrome 模式快照（唯一消费者是 ShellChrome）。 */
 export function shellChromeSnapshot(): ShellChromeState {
   return { mode: shellMode.mode() }
@@ -823,6 +853,7 @@ function registerShellDebug() {
     return {
       panelOpen: panel.isOpen(),
       routeId: panel.route(),
+      menuOpen: panel.isMenuOpen(),
       railWidth: bounds.rail.width,
       windowWidth: w,
       windowHeight: h,

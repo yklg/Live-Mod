@@ -9,21 +9,12 @@
 // - 面板改为「**保留节点 + data-state**」（§13-6 离场载体）：关闭时先播离场动画再卸载，
 //   否则条件渲染会直接卸载节点，离场动画永远没有播放机会。
 
-import {
-  Gift,
-  HelpCircle,
-  Megaphone,
-  MessageCircle,
-  MessagesSquare,
-  Settings,
-  Tv,
-  X,
-} from 'lucide-react'
+import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router'
 import type { ShellRailState } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { SHELL_RAIL_ROUTES, SHELL_ROUTES, type ShellRouteId } from 'shared/shellRoutes'
+import { SHELL_ROUTES, type ShellRouteId } from 'shared/shellRoutes'
 import { Toaster } from '@/components/ui/toaster'
 import { UpdateDialog } from '@/components/update/UpdateDialog'
 import { useGlobalIpcListener } from '@/hooks/useGlobalIpcListener'
@@ -35,22 +26,10 @@ import LiveControl from '@/pages/LiveControl'
 import LiveInteraction from '@/pages/LiveInteraction'
 import RedPacket from '@/pages/RedPacket'
 import SettingsPage from '@/pages/SettingsPage'
-
-const GITHUB_URL = 'https://github.com/yklg/Live-Mod'
+import { RailMenuList } from './railMenuItems'
 
 /** 动效时长：与设计令牌 --motion-base 一致（180ms） */
 const MOTION_BASE_MS = 180
-
-const ROUTE_ICONS: Record<ShellRouteId, React.ComponentType<{ className?: string }>> = {
-  live: Tv,
-  popup: Gift,
-  message: Megaphone,
-  reply: MessagesSquare,
-  'reply-settings': MessagesSquare,
-  interaction: MessageCircle,
-  settings: Settings,
-  'red-packet': Gift,
-}
 
 const ROUTE_ELEMENTS: Record<ShellRouteId, React.ReactNode> = {
   live: <LiveControl />,
@@ -63,25 +42,19 @@ const ROUTE_ELEMENTS: Record<ShellRouteId, React.ReactNode> = {
   'red-packet': <RedPacket />,
 }
 
-interface RailItem {
-  id: string
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  panelTitle?: string
-  path?: string
-  external?: boolean
-}
-
-const ITEMS: RailItem[] = [
-  ...SHELL_RAIL_ROUTES.map(route => ({
-    id: route.id,
-    icon: ROUTE_ICONS[route.id],
-    label: route.label,
-    panelTitle: route.panelTitle,
-    path: route.path,
-  })),
-  { id: 'help', icon: HelpCircle, label: '帮助', panelTitle: '帮助', external: true },
-]
+/**
+ * 面板标题/路径查找表（壳 v3 · Wave 3）。
+ *
+ * 图标映射随 56px 图标条一起删除：功能入口改由顶栏悬浮菜单承担，
+ * 图标归 `railMenuItems.tsx`（清单唯一真源，且**不得**从本文件导出）。
+ */
+const PANEL_META: Record<string, { label: string; panelTitle?: string; path?: string }> =
+  Object.fromEntries(
+    SHELL_ROUTES.map(route => [
+      route.id,
+      { label: route.label, panelTitle: route.panelTitle, path: route.path },
+    ]),
+  )
 
 function requestToggle(routeId?: string | null) {
   void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railToggle, routeId ?? null)
@@ -97,16 +70,16 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * 面板节点的挂载态（离场载体，§13-6）。
+ * 节点的挂载态（离场载体，§13-6）。
  *
  * 关闭时**不立即卸载**：先让节点以 data-state="closed" 播离场动画，
  * 动画结束后再卸载。这样不会出现「节点已卸载但动画仍在」，也不会出现
  * 「动画未完成就重建」。reduced-motion 下延迟为 0（动画本身被 CSS 关掉）。
  */
-function usePanelMounted(panelOpen: boolean): boolean {
-  const [mounted, setMounted] = useState(panelOpen)
+function useMountedWhile(open: boolean): boolean {
+  const [mounted, setMounted] = useState(open)
   useEffect(() => {
-    if (panelOpen) {
+    if (open) {
       setMounted(true)
       return
     }
@@ -115,7 +88,7 @@ function usePanelMounted(panelOpen: boolean): boolean {
       prefersReducedMotion() ? 0 : MOTION_BASE_MS,
     )
     return () => window.clearTimeout(timer)
-  }, [panelOpen])
+  }, [open])
   return mounted
 }
 
@@ -127,6 +100,7 @@ export function ShellRailRoot() {
   const [rail, setRail] = useState<ShellRailState>({
     panelOpen: window.innerWidth > 0,
     routeId: null,
+    menuOpen: false,
   })
 
   useEffect(() => {
@@ -135,13 +109,20 @@ export function ShellRailRoot() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && rail.panelOpen) requestToggle(null)
+      if (e.key !== 'Escape') return
+      // ESC 关菜单优先（菜单开着时面板已让位）（壳 v3 · Wave 3）
+      if (rail.menuOpen) {
+        void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railMenuToggle)
+        return
+      }
+      if (rail.panelOpen) requestToggle(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [rail.panelOpen])
+  }, [rail.panelOpen, rail.menuOpen])
 
-  const panelMounted = usePanelMounted(rail.panelOpen)
+  const panelMounted = useMountedWhile(rail.panelOpen)
+  const menuMounted = useMountedWhile(rail.menuOpen)
 
   return (
     <div className="relative flex h-screen w-screen overflow-hidden bg-background text-foreground">
@@ -163,8 +144,8 @@ export function ShellRailRoot() {
           }}
         />
       )}
-      <MemoryRouter initialEntries={[ITEMS.find(i => i.id === rail.routeId)?.path ?? '/']}>
-        <ShellRailLayout rail={rail} panelMounted={panelMounted} />
+      <MemoryRouter initialEntries={[PANEL_META[rail.routeId ?? '']?.path ?? '/']}>
+        <ShellRailLayout rail={rail} panelMounted={panelMounted} menuMounted={menuMounted} />
       </MemoryRouter>
       <Toaster />
       <UpdateDialog panelOpen={rail.panelOpen} />
@@ -175,9 +156,11 @@ export function ShellRailRoot() {
 function ShellRailLayout({
   rail,
   panelMounted,
+  menuMounted,
 }: {
   rail: ShellRailState
   panelMounted: boolean
+  menuMounted: boolean
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -186,13 +169,13 @@ function ShellRailLayout({
   // 跟随推送换页：routeId 变化才 navigate（面板内容由路由决定，开合由主进程决定）
   useEffect(() => {
     if (rail.panelOpen && rail.routeId && rail.routeId !== lastRoute) {
-      const item = ITEMS.find(i => i.id === rail.routeId)
+      const item = PANEL_META[rail.routeId]
       if (item?.path) navigate(item.path)
       setLastRoute(rail.routeId)
     }
   }, [rail, lastRoute, navigate])
 
-  const activeItem = ITEMS.find(i => i.id === rail.routeId)
+  const activeItem = PANEL_META[rail.routeId ?? '']
   const activeRoute =
     SHELL_ROUTES.find(r => r.path === location.pathname) ??
     SHELL_ROUTES.find(r => r.id === rail.routeId)
@@ -201,6 +184,16 @@ function ShellRailLayout({
 
   return (
     <>
+      {/* 顶栏悬浮菜单（壳 v3 · Wave 3）：与面板互斥，切换时两段动画重叠播放 */}
+      {menuMounted && (
+        <div
+          data-testid="shell-menu-host"
+          data-state={rail.menuOpen ? 'open' : 'closed'}
+          className="flex w-full flex-col p-1 motion-base data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2"
+        >
+          <RailMenuList activeRouteId={rail.routeId} />
+        </div>
+      )}
       {panelMounted && (
         <div
           data-testid="shell-panel"

@@ -248,6 +248,9 @@ export interface IpcChannels {
   [IPC_CHANNELS.shell.windowClose]: () => void
   [IPC_CHANNELS.shell.railToggle]: (routeId?: string | null) => void
   [IPC_CHANNELS.shell.railState]: (state: ShellRailState) => void
+  // 顶栏悬浮菜单（壳 v3 · Wave 3）
+  [IPC_CHANNELS.shell.railMenuToggle]: () => void
+  [IPC_CHANNELS.shell.railMenuSelect]: (routeId: string) => void
   [IPC_CHANNELS.shell.warnToast]: (message: string) => void
   [IPC_CHANNELS.shell.uiStatus]: () => boolean
   [IPC_CHANNELS.shell.resetLoginState]: (accountId: string) => Promise<void>
@@ -294,6 +297,11 @@ export interface ShellTabsState {
 export interface ShellRailState {
   panelOpen: boolean
   routeId: string | null
+  /**
+   * 顶栏悬浮菜单是否打开（壳 v3 · Wave 3）。
+   * 与 panelOpen 互斥：菜单开时面板让位，选中项后菜单关、面板开。
+   */
+  menuOpen: boolean
 }
 
 export interface ElectronAPI {

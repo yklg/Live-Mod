@@ -19,7 +19,8 @@ const h = vi.hoisted(() => {
   const sends: Array<{ channel: string }> = []
 
   /** 闸门：控制"等待中的操作"何时结束（放行 → 继续；失败 → 直接抛） */
-  let gate: { promise: Promise<void>; release: () => void; fail: (e: unknown) => void } | null = null
+  let gate: { promise: Promise<void>; release: () => void; fail: (e: unknown) => void } | null =
+    null
   function openGate() {
     let release!: () => void
     let fail!: (e: unknown) => void
@@ -124,7 +125,9 @@ function newSession() {
 }
 
 function platformOf(session: AccountSession) {
-  return (session as unknown as { platform: h.GatePlatform }).platform
+  // 平台的 connect 行为由用例注入（闸门控制抛错时机）
+  return (session as unknown as { platform: { onConnect: (s: unknown) => Promise<boolean> } })
+    .platform
 }
 
 beforeEach(() => {

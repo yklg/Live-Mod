@@ -19,7 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
-  const pushNotice = vi.fn(() => true)
+  const pushNotice = vi.fn((_input: unknown) => true)
   const hideEntry = vi.fn()
   const isShellUIEnabled = vi.fn(() => true)
   const shellModeSet = vi.fn()
@@ -86,10 +86,7 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { AttachSessionError } from '#/errors/AttachSessionError'
 import { ConnectionAbortedError } from '#/errors/ConnectionAbortedError'
 import { setupLiveControlIpcHandlers } from '#/ipc/connection'
-import {
-  connectBranch,
-  resolveConnectOutcome,
-} from '@/pages/LiveControl/lib/connectOutcome'
+import { connectBranch, resolveConnectOutcome } from '@/pages/LiveControl/lib/connectOutcome'
 
 const CONNECT = IPC_CHANNELS.tasks.liveControl.connect
 
@@ -108,11 +105,14 @@ function stubSession(behaviour: 'ok' | Error) {
 async function callConnect() {
   const handler = h.handlers.get(CONNECT)
   if (!handler) throw new Error(`未注册 handler: ${CONNECT}`)
-  return (await handler({}, {
-    platform: 'douyin',
-    account,
-    headless: false,
-  })) as ConnectResult
+  return (await handler(
+    {},
+    {
+      platform: 'douyin',
+      account,
+      headless: false,
+    },
+  )) as ConnectResult
 }
 
 describe('主进程 connect handler（CV-I01/I02/I04/I05/I09）', () => {
@@ -138,8 +138,9 @@ describe('主进程 connect handler（CV-I01/I02/I04/I05/I09）', () => {
     stubSession(new ConnectionAbortedError('conn-acc-1-1', 'user'))
     const result = await callConnect()
     expect(result.ok).toBe(false)
-    expect(result.aborted).toBe(true)
-    expect(typeof (result as { connectId?: string }).connectId).toBe('string')
+    const aborted = result as { aborted?: boolean; connectId?: string }
+    expect(aborted.aborted).toBe(true)
+    expect(typeof aborted.connectId).toBe('string')
     // 静默：一条通知都不推
     expect(h.pushNotice).toHaveBeenCalledTimes(0)
   })
@@ -150,7 +151,10 @@ describe('主进程 connect handler（CV-I01/I02/I04/I05/I09）', () => {
     expect(result).toMatchObject({ ok: false, aborted: false, kind: 'attach' })
     expect((result as { reason: string }).reason).toContain('cdp-endpoint')
     expect(h.pushNotice).toHaveBeenCalledTimes(1)
-    const notice = h.pushNotice.mock.calls[0][0] as { variant: string; description: string }
+    const notice = h.pushNotice.mock.calls[0][0] as unknown as {
+      variant: string
+      description: string
+    }
     expect(notice.variant).toBe('error')
     expect(notice.description).toContain('kind=attach')
     expect(notice.description).toContain('cdp-endpoint')

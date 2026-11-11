@@ -68,9 +68,13 @@ describe('shellRoutes 单一源', () => {
 
   it('消费方不再手写 AI 路由（经典 router 已移除）', () => {
     const rail = read('../src/shell/ShellRail.tsx')
-    expect(rail).toContain('SHELL_RAIL_ROUTES')
+    const menu = readIfExists('../src/shell/railMenuItems.tsx')
+    // 壳 v3 · Wave 3：56px 图标条删除后，SHELL_RAIL_ROUTES 的消费方迁到顶栏悬浮菜单，
+    // ShellRail 只保留 SHELL_ROUTES（面板内容与标题的单一源）。
+    expect(menu).toContain('SHELL_RAIL_ROUTES')
     expect(rail).toContain('SHELL_ROUTES')
     expect(rail).not.toContain('/ai-chat')
+    expect(menu).not.toContain('/ai-chat')
     expect(readIfExists('../src/router/index.tsx')).toBeNull()
   })
 })

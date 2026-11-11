@@ -88,10 +88,11 @@ describe('shell IPC 通道契约（TC-P4）', () => {
         for (const [k, child] of Object.entries(v)) walk(child, `${prefix ? `${prefix}.` : ''}${k}`)
     }
     walk(shell, '')
-    // tab×7 + list/state + window×3 + railToggle/railState + warnToast/uiStatus/resetLoginState(17)
-    // + entryCatalog/entrySelect/entryIntent/entrySkip/entryReopen/railReady(6，shell-entry-platform-selector v1)
-    // + notify/notice/noticeReady(3，shell-ui-polish v3 通知层)
-    expect(keys.length).toBeGreaterThanOrEqual(26)
+    // 通道计数做成**精确断言**（trip-wire）：新增通道却没同步类型表/本计数，CI 立刻红。
+    // 分解：tab×10 + list/state + window×3 + railToggle/railState + railMenuToggle/railMenuSelect
+    //      + warnToast/uiStatus/resetLoginState + entry×6 + mode×3 + railReady + notify×3 = 42
+    // （壳 v3 · Wave 3 新增 railMenuToggle / railMenuSelect 两个通道）
+    expect(keys.length).toBe(42)
     const dts = readIfExists('shared/electron-api.d.ts')
     if (!dts) throw new Error('shared/electron-api.d.ts 缺失')
     for (const key of keys) {

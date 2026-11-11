@@ -200,7 +200,8 @@ export default function ShellChrome() {
           <button
             type="button"
             className="ml-1 flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            onClick={() => call('railToggle', 'popup')}
+            onClick={() => call('railMenuToggle')}
+            title="展开 Live Mod 功能菜单"
           >
             <Tv className="size-3.5" /> 展开 Live Mod
           </button>

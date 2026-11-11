@@ -18,6 +18,8 @@ import {
   shellPanelDragBegin,
   shellPanelResize,
   shellPanelResizeEnd,
+  shellRailMenuSelect,
+  shellRailMenuToggle,
   shellRailToggle,
   shellTabActivate,
   shellTabBack,
@@ -57,6 +59,11 @@ function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.shell.assistantReady, event => shellAssistantReady(event.sender))
   typedIpcMainHandle(IPC_CHANNELS.shell.tabsList, () => shellTabsList())
   typedIpcMainHandle(IPC_CHANNELS.shell.railToggle, (_, routeId) => shellRailToggle(routeId))
+  // 顶栏悬浮菜单（壳 v3 · Wave 3）：与面板入口共用 entry 守卫，不新建平行通路
+  typedIpcMainHandle(IPC_CHANNELS.shell.railMenuToggle, () => shellRailMenuToggle())
+  typedIpcMainHandle(IPC_CHANNELS.shell.railMenuSelect, (_, routeId) =>
+    shellRailMenuSelect(routeId),
+  )
   typedIpcMainHandle(IPC_CHANNELS.shell.modeSet, (_, mode) => shellModeSet(mode))
   typedIpcMainHandle(IPC_CHANNELS.shell.modeSnapshot, () => shellChromeSnapshot())
   typedIpcMainHandle(IPC_CHANNELS.shell.uiStatus, () => isShellUIEnabled())
