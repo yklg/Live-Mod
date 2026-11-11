@@ -256,7 +256,7 @@ async function main() {
     try {
       await ctx.invoke('shell:railToggle', 'reply')
       await sleep(500)
-      await ctx.invoke('shell:railToggle', 'settings')
+      await rail.locator('button[title="设置"]').click()
       await waitFor(
         async () =>
           (await railEval(rail, () =>

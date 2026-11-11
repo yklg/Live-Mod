@@ -81,7 +81,7 @@ async function main() {
     )
 
     // V1 面板内 LiveControl
-    await ctx.invoke('shell:railToggle', 'live')
+    await rail.evaluate(() => window.ipcRenderer.invoke('shell:railToggle', 'live'))
     await sleep(1200)
     const connectBtn = rail.locator('[data-testid="connect-live"]').first()
     record('V1 面板内 LiveControl 页', (await connectBtn.count()) > 0, '连接按钮命中')
