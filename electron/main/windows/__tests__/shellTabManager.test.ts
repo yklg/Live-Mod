@@ -664,4 +664,19 @@ describe('shellTabManager 固定账号卡（壳 v3 合并）', () => {
     f.manager.moveTab(free, 0)
     expect(f.manager.state().tabs.map(t => t.id)).toEqual([account, free])
   })
+
+  it('多账号：账号卡按创建序固定在前，free 与账号卡都不得破坏账号区', () => {
+    const f = setup()
+    const a1 = f.manager.createTab({ accountId: 'a1' })
+    const a2 = f.manager.createTab({ accountId: 'a2' })
+    const free = f.manager.createTab({})
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([a1, a2, free])
+    // free 拖到最左 → 钳制到账号区之后
+    f.manager.moveTab(free, 0)
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([a1, a2, free])
+    // 账号卡自身不可移动
+    f.manager.moveTab(a1, 2)
+    f.manager.moveTab(a2, 0)
+    expect(f.manager.state().tabs.map(t => t.id)).toEqual([a1, a2, free])
+  })
 })

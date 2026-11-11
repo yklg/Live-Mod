@@ -542,17 +542,12 @@ export function attachContainer(
     },
   })
 
-  // 菜单失焦收起（壳 v3）：任一壳视图获得/失去焦点都视为交互离开菜单。
-  // focus 覆盖「点到官方页/入口」，blur 覆盖「焦点从顶栏/菜单移走但目标视图未拿焦」的时序，
-  // 两者互补（E2E 无 OS 窗口焦点时 focus 可能不触发，blur 仍可观测）。
-  const dismissMenuOnFocus = () => {
-    if (panel.isMenuOpen()) panel.closeMenu()
-  }
-  for (const wc of [chromeView.webContents, railView.webContents, getEntryWebContents()]) {
-    if (!wc) continue
-    wc.on('focus', dismissMenuOnFocus)
-    wc.on('blur', dismissMenuOnFocus)
-  }
+  // 菜单收起契约：只由明确的外部输入信号驱动（page input-event / chrome pointerdown /
+  // ESC / 表面迁移）。
+  //
+  // **禁止用 focus/blur 推断**：菜单宿主就是 rail 视图，点击菜单项会让焦点进入 rail，
+  // `chrome blur` / `rail focus` 会在 click 之前把菜单收起，导致「点击 tab 无反应」。
+  // 焦点变化也无法区分「焦点进入菜单自身」与「交互离开菜单」，不是正确的抽象。
 
   const relayout = () => panel.resize()
   win.on('resize', relayout)
@@ -892,6 +887,8 @@ function registerShellDebug() {
       mode: shellMode.mode(),
       dockOpen: panel.isOpen(),
       dockWidth: panelWidth,
+      // 菜单态优先级高于面板：不传会让调试快照把菜单打开时的 rail 误报为宽度 0。
+      menuOpen: panel.isMenuOpen(),
       activeTabPresent: tabManager.hasActiveTab(),
     })
     const noticeBus = getNoticeBusState()
@@ -980,16 +977,8 @@ function registerShellDebug() {
     })
     return wc.id
   }
-  a.__shellFocusView = (name: 'chrome' | 'rail' | 'page') => {
-    const wc =
-      name === 'chrome'
-        ? chromeView?.webContents
-        : name === 'rail'
-          ? railView?.webContents
-          : (() => {
-              const id = tabManager?.activeWebContentsId()
-              return id != null ? electronWebContents.fromId(id) : null
-            })()
+  a.__shellFocusView = (name: 'chrome' | 'rail') => {
+    const wc = name === 'chrome' ? chromeView?.webContents : railView?.webContents
     wc?.focus()
     return wc?.id ?? null
   }

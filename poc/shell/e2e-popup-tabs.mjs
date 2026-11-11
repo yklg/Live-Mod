@@ -124,6 +124,8 @@ async function main() {
     }, 20_000)
 
     const tabsList = () => chromePage.evaluate(() => window.ipcRenderer.invoke('shell:tabsList'))
+    const modeSnapshot = () =>
+      chromePage.evaluate(() => window.ipcRenderer.invoke('shell:modeSnapshot'))
     const tabState = async () => {
       const state = await tabsList()
       const dbg = await debug()
@@ -313,6 +315,55 @@ async function main() {
       fg && bg && suppressed && intentFold,
       `foreground=${fg} background=${bg} suppressed=${suppressed} intentFold=${intentFold}`,
     )
+
+    // ===== POP11 account live 下后台弹窗不切表面（标签轴合并契约）=====
+    try {
+      const accountId = await chromePage.evaluate(() =>
+        window.ipcRenderer.invoke('shell:tabCreate', { accountId: 'e2e-live-acc' }),
+      )
+      await chromePage.evaluate(
+        ({ id, base }) =>
+          window.ipcRenderer.invoke('shell:tabNavigate', id, `${base}/fold.html?acc=1`),
+        { id: accountId, base },
+      )
+      const accountPage = await findPage('/fold.html?acc=1')
+      await accountPage.waitForLoadState('domcontentloaded')
+      // 该套件从 entry 启动，先进入 live（account 表面）再验证「后台弹窗不切表面」。
+      await chromePage.evaluate(() => window.ipcRenderer.invoke('shell:modeSet', 'live'))
+      await sleep(500)
+      // opener：另一个后台 free 页（account 激活时它处于后台）
+      await chromePage.evaluate(
+        ({ base }) =>
+          window.ipcRenderer.invoke('shell:tabCreate', { url: `${base}/bg.html?opener=1` }),
+        { base },
+      )
+      const openerPage = await findPage('/bg.html?opener=1')
+      await openerPage.waitForLoadState('domcontentloaded')
+      await chromePage.evaluate(id => window.ipcRenderer.invoke('shell:tabActivate', id), accountId)
+      await sleep(600)
+      const beforeLive = await tabState()
+      const beforeMode = await modeSnapshot()
+      await openerPage.evaluate(() => window.open('/other.html'))
+      await sleep(1200)
+      const afterLive = await tabState()
+      const afterMode = await modeSnapshot()
+      record(
+        'POP11',
+        beforeMode.mode === 'live' &&
+          afterMode.mode === 'live' &&
+          afterLive.activeId === accountId &&
+          afterLive.count === beforeLive.count + 1,
+        JSON.stringify({
+          before: beforeMode.mode,
+          after: afterMode.mode,
+          active: afterLive.activeId,
+          accountId,
+          count: `${beforeLive.count}->${afterLive.count}`,
+        }),
+      )
+    } catch (e) {
+      record('POP11', false, String(e.message ?? e))
+    }
 
     // ===== 清理测试 Tab =====
     for (const t of (await tabsList()).tabs) {

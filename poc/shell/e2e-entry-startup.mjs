@@ -87,6 +87,16 @@ async function main() {
       JSON.stringify(chromeState),
     )
 
+    // ES-4b：entry 模式菜单守卫（菜单只属于非 entry 表面）
+    await chrome.locator('button[title="展开 Live Mod 功能菜单"]').click()
+    await sleep(250)
+    const entryMenu = await ctx.debug()
+    record(
+      'ES-4b entry 模式菜单守卫生效',
+      entryMenu.menuOpen === false && entryMenu.shellMode === 'entry',
+      JSON.stringify({ menu: entryMenu.menuOpen, mode: entryMenu.shellMode }),
+    )
+
     await entry.locator('[data-testid="entry-skip"]').click()
     const browse = await waitFor(
       async () => {

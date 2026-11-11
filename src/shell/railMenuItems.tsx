@@ -72,6 +72,8 @@ export function RailMenuList({ activeRouteId }: { activeRouteId?: string | null 
               onClick={() => {
                 if (item.external) {
                   void window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, GITHUB_URL)
+                  // 外链项不经过 railMenuSelect：必须显式收起菜单，否则会残留（看起来像没反应）。
+                  void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railMenuToggle)
                   return
                 }
                 void window.ipcRenderer.invoke(IPC_CHANNELS.shell.railMenuSelect, item.id)

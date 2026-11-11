@@ -95,6 +95,28 @@ async function main() {
     )
     record('V2 壳内 Tab 承载登录页', Boolean(loginPage), loginPage.url().slice(0, 90))
 
+    // V5-V7 中控默认缩放 80% / host 记忆优先 / 无记忆回落默认。
+    // 断言窗口 CSS 宽度：1280/0.8=1600，1280/0.9≈1422（不依赖主进程调试契约）。
+    // 说明：Cmd+= / Cmd+0 的键盘路径由 pageZoom/shellMenu 单测覆盖；CDP keyboard 不触发
+    // Electron before-input-event（实测），故这里通过 shell-zoom.json 落盘验证加载/回落链路。
+    const viewportWidth = () => loginPage.evaluate(() => window.innerWidth).catch(() => 0)
+    const zoomFile = path.join(profile, 'shell-zoom.json')
+    const reloadAndWidth = async () => {
+      await loginPage.reload()
+      await loginPage.waitForLoadState('domcontentloaded').catch(() => {})
+      await sleep(1200)
+      return viewportWidth()
+    }
+    await sleep(1200)
+    const w80 = await viewportWidth()
+    record('V5 中控默认缩放 80%', Math.abs(w80 - 1600) <= 60, `innerWidth=${w80}`)
+    writeFileSync(zoomFile, JSON.stringify({ version: 1, byHost: { 'fxg.jinritemai.com': 0.9 } }))
+    const w90 = await reloadAndWidth()
+    record('V6 host 记忆优先（0.9 落盘生效）', Math.abs(w90 - 1422) <= 60, `innerWidth=${w90}`)
+    writeFileSync(zoomFile, JSON.stringify({ version: 1, byHost: {} }))
+    const wReset = await reloadAndWidth()
+    record('V7 无记忆回落默认 80%', Math.abs(wReset - 1600) <= 60, `innerWidth=${wReset}`)
+
     // V3 无外部浏览器进程（launch 降级特征）
     const external = (() => {
       try {

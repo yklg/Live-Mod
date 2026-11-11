@@ -236,3 +236,24 @@ describe('G3 全仓：强制外部浏览器逃生口不得复活', () => {
     expect(findIdentifiers(goodSf, 'forceExternal')).toHaveLength(0)
   })
 })
+
+// ===== G4 菜单收起信号（菜单项点击无反应回归的机制守卫）=====
+// 不变量：菜单收起只能由显式外部输入驱动（page input-event / chrome pointerdown / ESC / 表面迁移）。
+// 反例：railView 也是菜单宿主，点击菜单项会让焦点进入 rail；若用 focus/blur 关菜单，
+// click 在 mouseup 前就被收起 → 所有菜单项都「点了没反应」。
+describe('G4 菜单收起不得使用 focus/blur 推断', () => {
+  const detector = (text: string) =>
+    /dismissMenuOnFocus|railView\.webContents\.on\('(?:focus|blur)'/.test(text)
+
+  it('G4 真实文件：shellUI 不再用 focus/blur 关菜单', () => {
+    const src = readSource('electron/main/windows/shellUI.ts')
+    expect(detector(src), '菜单收起不得依赖 rail focus/blur（点击会被提前收起）').toBe(false)
+  })
+
+  it('G4 等价类：违规写法命中，合法外部输入信号不误报', () => {
+    expect(detector('const dismissMenuOnFocus = () => {}')).toBe(true)
+    expect(detector("railView.webContents.on('focus', fn)")).toBe(true)
+    expect(detector("chromeView.webContents.on('focus', fn)")).toBe(false)
+    expect(detector("view.webContents.on('input-event', fn)")).toBe(false)
+  })
+})
