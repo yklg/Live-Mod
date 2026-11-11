@@ -110,7 +110,7 @@
     "typescript": "^5.9.3",
     "vaul": "^1.1.2",
     "vite": "^6.0.11",
-    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron": "^1.2.0",
     "vite-plugin-electron-renderer": "^0.14.6",
     "vitest": "^3.2.4",
     "ws": "^8.18.1",
